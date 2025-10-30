@@ -36,11 +36,18 @@ let gameState = {
     totalOrdersCompleted: 0,
     currentShopTab: 'parts',
     supplyActive: false,
+    supplyIntervalId: null,
     combo: 0,
     comboTimer: null,
     prestige: 0,
     achievements: [],
-    activeEvents: []
+    activeEvents: [],
+    lastPartNotificationTime: {},
+    maxOrderLimit: GAME_CONFIG.maxOrders,
+    gameLoopIntervalId: null,
+    saveIntervalId: null,
+    eventIntervalId: null,
+    eventBadgeIntervalId: null
 };
 
 const ORDER_TEMPLATES = [
@@ -185,12 +192,21 @@ function loadGame() {
         const saved = localStorage.getItem('wsdServiceSave');
         if (saved) {
             const loaded = JSON.parse(saved);
-            gameState = { ...gameState, ...loaded };
-            if (!gameState.achievements) gameState.achievements = [];
-            if (!gameState.prestige) gameState.prestige = 0;
-            if (!gameState.combo) gameState.combo = 0;
-            if (!gameState.activeEvents) gameState.activeEvents = [];
-            if (!gameState.rareOrdersCompleted) gameState.rareOrdersCompleted = 0;
+            const defaultState = {
+                achievements: [],
+                prestige: 0,
+                combo: 0,
+                activeEvents: [],
+                rareOrdersCompleted: 0,
+                lastPartNotificationTime: {},
+                maxOrderLimit: GAME_CONFIG.maxOrders,
+                supplyIntervalId: null,
+                gameLoopIntervalId: null,
+                saveIntervalId: null,
+                eventIntervalId: null,
+                eventBadgeIntervalId: null
+            };
+            gameState = { ...defaultState, ...gameState, ...loaded };
         }
     } catch (e) {
         console.error('Ошибка загрузки:', e);
@@ -198,7 +214,7 @@ function loadGame() {
 }
 
 function createOrder() {
-    if (gameState.orders.length >= GAME_CONFIG.maxOrders) return;
+    if (gameState.orders.length >= gameState.maxOrderLimit) return;
     
     const available = ORDER_TEMPLATES.filter(o => gameState.totalOrdersCompleted >= o.minCompleted);
     if (!available.length) return;
@@ -247,6 +263,19 @@ function renderEmployees() {
         return;
     }
     
+    const fireBtnStyle = `
+        position: absolute; 
+        top: 5px; 
+        right: 10px; 
+        font-size: 1.5em; 
+        font-weight: bold; 
+        cursor: pointer; 
+        transition: transform 0.2s;
+        line-height: 1;
+        padding: 2px 5px;
+        color: rgba(255, 255, 255, 0.7);
+    `;
+    
     gameState.employees.forEach(emp => {
         const card = document.createElement("div");
         card.className = `employee-card ${emp.isBusy ? 'busy' : ''}`;
@@ -259,7 +288,16 @@ function renderEmployees() {
         if (emp.perks.bonusReward) perksHTML += `<div class="perk-item">💰 +${Math.round(emp.perks.bonusReward*100)}% награда</div>`;
         if (emp.perks.expBoost) perksHTML += `<div class="perk-item">📚 +${Math.round(emp.perks.expBoost*100)}% опыт</div>`;
         
+        const fireButtonHTML = emp.id !== 'emp-starter' ? `
+            <div class="fire-employee-btn" data-empid="${emp.id}" style="${fireBtnStyle}" 
+                 onmouseover="this.style.transform='scale(1.2)'; this.style.color='rgba(255, 100, 100, 1)';" 
+                 onmouseout="this.style.transform='scale(1)'; this.style.color='rgba(255, 255, 255, 0.7)';">
+                &times;
+            </div>
+        ` : '';
+
         card.innerHTML = `
+            ${fireButtonHTML}
             <div class="employee-avatar">${emp.avatar}</div>
             <div class="employee-stats">
                 <div><strong>${emp.name || 'Сотрудник'}</strong></div>
@@ -321,9 +359,13 @@ function renderOrders() {
             </div>
         `;
         
-        card.addEventListener('dragover', e => {
+        card.addEventListener('dragenter', e => {
             e.preventDefault();
             card.classList.add('drag-over');
+        });
+
+        card.addEventListener('dragover', e => {
+            e.preventDefault();
         });
         
         card.addEventListener('dragleave', () => {
@@ -357,7 +399,15 @@ function assignEmployeeToOrder(empId, orderId) {
     
     for (const [part, qty] of Object.entries(order.partsRequired)) {
         if ((gameState.parts[part] || 0) < qty) {
-            showNotification(`Недостаточно деталей: ${PART_ICONS[part]}`, 'error');
+            
+            const currentTime = Date.now();
+            const lastTime = gameState.lastPartNotificationTime[part] || 0;
+            const throttleDelay = 60000;
+            
+            if (currentTime - lastTime > throttleDelay) {
+                showNotification(`Недостаточно деталей: ${PART_ICONS[part]}`, 'error');
+                gameState.lastPartNotificationTime[part] = currentTime;
+            }
             return;
         }
     }
@@ -461,7 +511,7 @@ function renderShop() {
                 name: '📋 Расширить лимит заказов', 
                 cost: GAME_CONFIG.orderIncreaseCost, 
                 action: expandOrders,
-                desc: `+5 к максимуму заказов (текущий: ${GAME_CONFIG.maxOrders})`
+                desc: `+5 к максимуму заказов (текущий: ${gameState.maxOrderLimit})`
             },
             { 
                 name: '🤖 Автоматизация сотрудника', 
@@ -574,6 +624,40 @@ function hireEmployee() {
     checkAchievements();
 }
 
+function fireEmployee(empId) {
+    const emp = gameState.employees.find(e => e.id === empId);
+    if (!emp) return;
+    
+    if (emp.isBusy) {
+        showNotification('Нельзя уволить занятого сотрудника!', 'error');
+        return;
+    }
+
+    if (emp.id === 'emp-starter') {
+        showNotification('Нельзя уволить стартового стажера!', 'error');
+        return;
+    }
+
+    const severance = Math.floor(gameState.money * 0.10);
+    
+    if (!confirm(`Уволить ${emp.name}? Это будет стоить ${severance} 💰 (10% выходного пособия).`)) {
+        return;
+    }
+
+    if (gameState.money < severance) {
+        showNotification('Недостаточно денег для выплаты пособия!', 'error');
+        return;
+    }
+
+    gameState.money -= severance;
+    gameState.employees = gameState.employees.filter(e => e.id !== empId);
+    
+    showNotification(`${emp.name} уволен. Выплачено ${severance} 💰.`, 'info');
+    
+    renderEmployees();
+    updateUI();
+}
+
 function upgradeEmployees() {
     const cost = GAME_CONFIG.upgradeCost;
     if (gameState.money < cost) {
@@ -611,7 +695,8 @@ function buySupply() {
     gameState.money -= cost;
     gameState.supplyActive = true;
     
-    setInterval(() => {
+    if (gameState.supplyIntervalId) clearInterval(gameState.supplyIntervalId);
+    gameState.supplyIntervalId = setInterval(() => {
         if (gameState.supplyActive) {
             for (const part in GAME_CONFIG.supplyAmount) {
                 gameState.parts[part] += GAME_CONFIG.supplyAmount[part];
@@ -634,7 +719,7 @@ function expandOrders() {
     }
     
     gameState.money -= cost;
-    GAME_CONFIG.maxOrders += 5;
+    gameState.maxOrderLimit += 5;
     
     showNotification('Лимит заказов увеличен!', 'success');
     updateUI();
@@ -672,6 +757,12 @@ function doPrestige() {
         return;
     }
     
+    if (gameState.supplyIntervalId) clearInterval(gameState.supplyIntervalId);
+    if (gameState.gameLoopIntervalId) clearInterval(gameState.gameLoopIntervalId);
+    if (gameState.saveIntervalId) clearInterval(gameState.saveIntervalId);
+    if (gameState.eventIntervalId) clearInterval(gameState.eventIntervalId);
+    if (gameState.eventBadgeIntervalId) clearInterval(gameState.eventBadgeIntervalId);
+    
     gameState.prestige++;
     gameState.money = GAME_CONFIG.startMoney;
     gameState.parts = {...GAME_CONFIG.startParts};
@@ -680,18 +771,32 @@ function doPrestige() {
     gameState.totalOrdersCompleted = 0;
     gameState.combo = 0;
     gameState.supplyActive = false;
-    GAME_CONFIG.maxOrders = 8;
+    gameState.supplyIntervalId = null;
+    gameState.maxOrderLimit = GAME_CONFIG.maxOrders;
+    gameState.gameLoopIntervalId = null;
+    gameState.saveIntervalId = null;
+    gameState.eventIntervalId = null;
+    gameState.eventBadgeIntervalId = null;
     
     showNotification(`🎉 Престиж ${gameState.prestige}! Бонус: +${gameState.prestige * 10}%`, 'success');
     renderEmployees();
     renderOrders();
     renderShop();
     updateUI();
+    initIntervals();
     saveGame();
 }
 
 function resetGame() {
     if (!confirm('Вы уверены? Весь прогресс будет потерян!')) return;
+    
+    window.removeEventListener('beforeunload', saveGame);
+    
+    if (gameState.supplyIntervalId) clearInterval(gameState.supplyIntervalId);
+    if (gameState.gameLoopIntervalId) clearInterval(gameState.gameLoopIntervalId);
+    if (gameState.saveIntervalId) clearInterval(gameState.saveIntervalId);
+    if (gameState.eventIntervalId) clearInterval(gameState.eventIntervalId);
+    if (gameState.eventBadgeIntervalId) clearInterval(gameState.eventBadgeIntervalId);
     
     localStorage.removeItem('wsdServiceSave');
     location.reload();
@@ -921,17 +1026,32 @@ function setupShopTabs() {
     });
 }
 
-setInterval(() => {
-    renderEventBadges();
-}, 1000);
+function initIntervals() {
+    if (gameState.gameLoopIntervalId) clearInterval(gameState.gameLoopIntervalId);
+    gameState.gameLoopIntervalId = setInterval(gameLoop, 100);
+    
+    if (gameState.saveIntervalId) clearInterval(gameState.saveIntervalId);
+    gameState.saveIntervalId = setInterval(saveGame, 5000);
+    
+    if (gameState.eventIntervalId) clearInterval(gameState.eventIntervalId);
+    gameState.eventIntervalId = setInterval(triggerRandomEvent, 60000);
 
-setInterval(() => {
-    triggerRandomEvent();
-}, 60000);
+    if (gameState.eventBadgeIntervalId) clearInterval(gameState.eventBadgeIntervalId);
+    gameState.eventBadgeIntervalId = setInterval(renderEventBadges, 1000);
+}
 
 function init() {
     loadGame();
     setupShopTabs();
+    
+    document.getElementById('employeeList').addEventListener('click', e => {
+        if (e.target.classList.contains('fire-employee-btn')) {
+            e.stopPropagation();
+            const empId = e.target.dataset.empid;
+            fireEmployee(empId);
+        }
+    });
+
     renderEmployees();
     renderOrders();
     renderShop();
@@ -952,9 +1072,7 @@ function init() {
         renderEmployees();
     }
     
-    setInterval(gameLoop, 100);
-    
-    setInterval(saveGame, 5000);
+    initIntervals();
     
     showNotification('Игра загружена! Добро пожаловать! 🔧', 'success');
 }
