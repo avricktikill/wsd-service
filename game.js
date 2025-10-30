@@ -44,55 +44,55 @@ let gameState = {
     activeEvents: [],
     lastPartNotificationTime: {},
     maxOrderLimit: GAME_CONFIG.maxOrders,
-    gameLoopIntervalId: null,
+    gameLoopRequestId: null, // Changed from IntervalId to RequestId
     saveIntervalId: null,
     eventIntervalId: null,
     eventBadgeIntervalId: null
 };
 
 const ORDER_TEMPLATES = [
-    { type: 'Телефон', minCompleted: 0, baseParts: { battery:1, cpu:1, ram:1 }, baseTime: 100, baseReward: 25 },
-    { type: 'Ноутбук', minCompleted: 5, baseParts: { battery:2, cpu:1, ram:2, motherboard:1 }, baseTime: 150, baseReward: 50 },
-    { type: 'ПК', minCompleted: 15, baseParts: { cpu:1, gpu:1, ram:2, motherboard:1, case:1 }, baseTime: 200, baseReward: 75 },
-    { type: 'Сервер', minCompleted: 30, baseParts: { cpu:2, ram:4, motherboard:1, case:1, gpu:2 }, baseTime: 300, baseReward: 150 },
-    { type: 'Суперкомпьютер', minCompleted: 50, baseParts: { cpu:4, ram:8, motherboard:2, case:2, gpu:4, battery:5 }, baseTime: 500, baseReward: 1000, rare: true },
-    { type: 'Планшет', minCompleted: 10, baseParts: { battery:1, ram:2, cpu:1 }, baseTime: 120, baseReward: 40 },
-    { type: 'Игровая консоль', minCompleted: 20, baseParts: { cpu:1, gpu:1, ram:1, case:1 }, baseTime: 180, baseReward: 60 },
+    { type: 'Phone', minCompleted: 0, baseParts: { battery:1, cpu:1, ram:1 }, baseTime: 100, baseReward: 25 },
+    { type: 'Laptop', minCompleted: 5, baseParts: { battery:2, cpu:1, ram:2, motherboard:1 }, baseTime: 150, baseReward: 50 },
+    { type: 'PC', minCompleted: 15, baseParts: { cpu:1, gpu:1, ram:2, motherboard:1, case:1 }, baseTime: 200, baseReward: 75 },
+    { type: 'Server', minCompleted: 30, baseParts: { cpu:2, ram:4, motherboard:1, case:1, gpu:2 }, baseTime: 300, baseReward: 150 },
+    { type: 'Supercomputer', minCompleted: 50, baseParts: { cpu:4, ram:8, motherboard:2, case:2, gpu:4, battery:5 }, baseTime: 500, baseReward: 1000, rare: true },
+    { type: 'Tablet', minCompleted: 10, baseParts: { battery:1, ram:2, cpu:1 }, baseTime: 120, baseReward: 40 },
+    { type: 'Gaming Console', minCompleted: 20, baseParts: { cpu:1, gpu:1, ram:1, case:1 }, baseTime: 180, baseReward: 60 },
 ];
 
 const CLIENT_NOTES = [
-    "Упал в воду, теперь только пузыри идут...",
-    "Случайно перепутал с орехоколом 🎃🥜",
-    "Разобрал, чтобы посмотреть, где живут смс — не собрал обратно",
-    "Играл в змейку, и он сгорел 🔥",
-    "Заряжал через микроволновку — не заряжается 🤷",
-    "Кот решил, что ноутбук — это лоток 🐈",
-    "Закрыл крышку, забыв про бутерброд внутри 🥪",
-    "Сидел на нём во время пар, теперь экран хрустит",
-    "Играл в Dark Souls, ноут не выдержал психической нагрузки",
-    "Подключил к розетке через вилку от чайника 🍵",
-    "Думал, что блок питания — это обогреватель",
-    "Пылесосил системник, засосало видеокарту 🌀"
+    "Fell into water, now only bubbles come out...",
+    "Mistakenly confused it with a nutcracker 🎃🥜",
+    "Took it apart to see where SMS lives — couldn't put it back together",
+    "Played Snake, and it burned up 🔥",
+    "Tried charging it in the microwave — it won't charge 🤷",
+    "The cat decided the laptop was a litter box 🐈",
+    "Closed the lid, forgetting a sandwich inside 🥪",
+    "Sat on it during lectures, now the screen is crunchy",
+    "Played Dark Souls, the laptop couldn't handle the mental stress",
+    "Plugged it into the socket using a tea kettle plug 🍵",
+    "Thought the power supply was a space heater",
+    "Vacuumed the system unit, sucked in the video card 🌀"
 ];
 
 const ACHIEVEMENTS = [
-    { id: 'first_order', name: 'Первый заказ', desc: 'Выполните первый заказ', icon: '🎯', check: s => s.totalOrdersCompleted >= 1, reward: 100 },
-    { id: 'ten_orders', name: 'Опытный мастер', desc: 'Выполните 10 заказов', icon: '⚡', check: s => s.totalOrdersCompleted >= 10, reward: 500 },
-    { id: 'fifty_orders', name: 'Профессионал', desc: 'Выполните 50 заказов', icon: '🏆', check: s => s.totalOrdersCompleted >= 50, reward: 2000 },
-    { id: 'hundred_orders', name: 'Легенда', desc: 'Выполните 100 заказов', icon: '👑', check: s => s.totalOrdersCompleted >= 100, reward: 5000 },
-    { id: 'rich', name: 'Богач', desc: 'Накопите 50000 денег', icon: '💰', check: s => s.money >= 50000, reward: 1000 },
-    { id: 'team', name: 'Командная работа', desc: 'Наймите 5 сотрудников', icon: '👥', check: s => s.employees.length >= 5, reward: 1500 },
-    { id: 'combo_master', name: 'Комбо мастер', desc: 'Достигните комбо x5', icon: '🔥', check: s => s.combo >= 5, reward: 800 },
-    { id: 'rare_order', name: 'Редкий клиент', desc: 'Выполните редкий заказ', icon: '⭐', check: s => s.rareOrdersCompleted >= 1, reward: 1000 },
+    { id: 'first_order', name: 'First Order', desc: 'Complete your first order', icon: '🎯', check: s => s.totalOrdersCompleted >= 1, reward: 100 },
+    { id: 'ten_orders', name: 'Experienced Master', desc: 'Complete 10 orders', icon: '⚡', check: s => s.totalOrdersCompleted >= 10, reward: 500 },
+    { id: 'fifty_orders', name: 'Professional', desc: 'Complete 50 orders', icon: '🏆', check: s => s.totalOrdersCompleted >= 50, reward: 2000 },
+    { id: 'hundred_orders', name: 'Legend', desc: 'Complete 100 orders', icon: '👑', check: s => s.totalOrdersCompleted >= 100, reward: 5000 },
+    { id: 'rich', name: 'Rich', desc: 'Accumulate 50,000 Money', icon: '💰', check: s => s.money >= 50000, reward: 1000 },
+    { id: 'team', name: 'Teamwork', desc: 'Hire 5 employees', icon: '👥', check: s => s.employees.length >= 5, reward: 1500 },
+    { id: 'combo_master', name: 'Combo Master', desc: 'Achieve a x5 combo', icon: '🔥', check: s => s.combo >= 5, reward: 800 },
+    { id: 'rare_order', name: 'Rare Client', desc: 'Complete a rare order', icon: '⭐', check: s => s.rareOrdersCompleted >= 1, reward: 1000 },
 ];
 
 const RANDOM_EVENTS = [
     {
-        name: 'Час пик',
+        name: 'Rush Hour',
         type: 'positive',
         duration: 15000,
         icon: '⚡',
-        desc: 'Вознаграждения увеличены на 50%!',
+        desc: 'Rewards increased by 50%!',
         apply: () => {
             gameState.rewardMultiplier = (gameState.rewardMultiplier || 1) * 1.5;
         },
@@ -101,11 +101,11 @@ const RANDOM_EVENTS = [
         }
     },
     {
-        name: 'Скидка от поставщика',
+        name: 'Supplier Discount',
         type: 'positive',
         duration: 20000,
         icon: '💸',
-        desc: 'Цены на детали снижены на 30%!',
+        desc: 'Part prices reduced by 30%!',
         apply: () => {
             gameState.costMultiplier = (gameState.costMultiplier || 1) * 0.7;
         },
@@ -114,40 +114,42 @@ const RANDOM_EVENTS = [
         }
     },
     {
-        name: 'Неожиданная поломка',
+        name: 'Unexpected Breakdown',
         type: 'negative',
         duration: 0,
         icon: '💥',
-        desc: 'Потеряно случайное количество деталей!',
+        desc: 'Lost a random amount of parts!',
         apply: () => {
             const parts = Object.keys(gameState.parts);
             const randomPart = parts[Math.floor(Math.random() * parts.length)];
             const loss = Math.min(3, gameState.parts[randomPart]);
             gameState.parts[randomPart] = Math.max(0, gameState.parts[randomPart] - loss);
-            showNotification(`Потеряно: ${PART_ICONS[randomPart]} x${loss}`, 'error');
+            showNotification(`Lost: ${PART_ICONS[randomPart]} x${loss}`, 'error');
+            updateUI();
         },
         revert: () => {}
     },
     {
-        name: 'Бонусный клиент',
+        name: 'Bonus Client',
         type: 'positive',
         duration: 0,
         icon: '🎁',
-        desc: 'Получен бонус деньгами!',
+        desc: 'Received a money bonus!',
         apply: () => {
             const bonus = 500 + Math.floor(Math.random() * 1000);
             gameState.money += bonus;
-            showNotification(`Бонус: 💰 ${bonus}`, 'success');
+            showNotification(`Bonus: 💰 ${bonus}`, 'success');
             createParticle('💰', window.innerWidth / 2, window.innerHeight / 2);
+            updateUI();
         },
         revert: () => {}
     },
     {
-        name: 'Забастовка сотрудников',
+        name: 'Employee Strike',
         type: 'negative',
         duration: 10000,
         icon: '🚫',
-        desc: 'Сотрудники работают на 50% медленнее!',
+        desc: 'Employees work 50% slower!',
         apply: () => {
             gameState.speedMultiplier = (gameState.speedMultiplier || 1) * 0.5;
         },
@@ -156,16 +158,16 @@ const RANDOM_EVENTS = [
         }
     },
     {
-        name: 'Вирусная реклама',
+        name: 'Viral Advertising',
         type: 'positive',
         duration: 0,
         icon: '📢',
-        desc: 'Появились дополнительные заказы!',
+        desc: 'Additional orders have appeared!',
         apply: () => {
             for (let i = 0; i < 3; i++) {
                 createOrder();
             }
-            showNotification('Получено 3 новых заказа!', 'success');
+            showNotification('Received 3 new orders!', 'success');
         },
         revert: () => {}
     }
@@ -183,7 +185,7 @@ function saveGame() {
     try {
         localStorage.setItem('wsdServiceSave', JSON.stringify(gameState));
     } catch (e) {
-        console.error('Ошибка сохранения:', e);
+        console.error('Save Error:', e);
     }
 }
 
@@ -201,7 +203,7 @@ function loadGame() {
                 lastPartNotificationTime: {},
                 maxOrderLimit: GAME_CONFIG.maxOrders,
                 supplyIntervalId: null,
-                gameLoopIntervalId: null,
+                gameLoopRequestId: null, 
                 saveIntervalId: null,
                 eventIntervalId: null,
                 eventBadgeIntervalId: null
@@ -209,7 +211,7 @@ function loadGame() {
             gameState = { ...defaultState, ...gameState, ...loaded };
         }
     } catch (e) {
-        console.error('Ошибка загрузки:', e);
+        console.error('Load Error:', e);
     }
 }
 
@@ -251,7 +253,7 @@ function createOrder() {
     };
     
     gameState.orders.push(order);
-    renderOrders();
+    renderOrders(); 
 }
 
 function renderEmployees() {
@@ -259,7 +261,7 @@ function renderEmployees() {
     list.innerHTML = "";
     
     if (gameState.employees.length === 0) {
-        list.innerHTML = '<div style="text-align: center; padding: 20px; opacity: 0.6;">Нанимайте сотрудников в магазине!</div>';
+        list.innerHTML = '<div style="text-align: center; padding: 20px; opacity: 0.6;">Hire employees in the shop!</div>';
         return;
     }
     
@@ -282,11 +284,11 @@ function renderEmployees() {
         card.draggable = !emp.isBusy;
         
         let perksHTML = '';
-        if (emp.perks.speedBonus) perksHTML += `<div class="perk-item">⚡ +${Math.round(emp.perks.speedBonus*100)}% скорость</div>`;
-        if (emp.perks.savePartChance) perksHTML += `<div class="perk-item">🔧 ${Math.round(emp.perks.savePartChance*100)}% экономия</div>`;
-        if (emp.perks.breakPartChance) perksHTML += `<div class="perk-item">💥 ${Math.round(emp.perks.breakPartChance*100)}% поломка</div>`;
-        if (emp.perks.bonusReward) perksHTML += `<div class="perk-item">💰 +${Math.round(emp.perks.bonusReward*100)}% награда</div>`;
-        if (emp.perks.expBoost) perksHTML += `<div class="perk-item">📚 +${Math.round(emp.perks.expBoost*100)}% опыт</div>`;
+        if (emp.perks.speedBonus) perksHTML += `<div class="perk-item">⚡ +${Math.round(emp.perks.speedBonus*100)}% speed</div>`;
+        if (emp.perks.savePartChance) perksHTML += `<div class="perk-item">🔧 ${Math.round(emp.perks.savePartChance*100)}% part saving</div>`;
+        if (emp.perks.breakPartChance) perksHTML += `<div class="perk-item">💥 ${Math.round(emp.perks.breakPartChance*100)}% breakage</div>`;
+        if (emp.perks.bonusReward) perksHTML += `<div class="perk-item">💰 +${Math.round(emp.perks.bonusReward*100)}% reward</div>`;
+        if (emp.perks.expBoost) perksHTML += `<div class="perk-item">📚 +${Math.round(emp.perks.expBoost*100)}% experience</div>`;
         
         const fireButtonHTML = emp.id !== 'emp-starter' ? `
             <div class="fire-employee-btn" data-empid="${emp.id}" style="${fireBtnStyle}" 
@@ -300,10 +302,10 @@ function renderEmployees() {
             ${fireButtonHTML}
             <div class="employee-avatar">${emp.avatar}</div>
             <div class="employee-stats">
-                <div><strong>${emp.name || 'Сотрудник'}</strong></div>
-                <div>Скорость: ${emp.speed.toFixed(1)}</div>
-                <div>Выполнил: ${emp.ordersCompleted}</div>
-                <div style="margin-top: 5px;">${emp.isBusy ? '🛠 В работе' : '✅ Свободен'}</div>
+                <div><strong>${emp.name || 'Employee'}</strong></div>
+                <div>Speed: ${emp.speed.toFixed(1)}</div>
+                <div>Completed: ${emp.ordersCompleted}</div>
+                <div style="margin-top: 5px;">${emp.isBusy ? '🛠 Working' : '✅ Free'}</div>
             </div>
             ${perksHTML ? `<div class="perk-list">${perksHTML}</div>` : ''}
         `;
@@ -325,17 +327,48 @@ function renderEmployees() {
 
 function renderOrders() {
     const list = document.getElementById('orderList');
-    list.innerHTML = '';
     
     if (gameState.orders.length === 0) {
-        list.innerHTML = '<div style="text-align: center; padding: 20px; opacity: 0.6; grid-column: 1/-1;">Ожидание новых заказов...</div>';
+        list.innerHTML = '<div style="text-align: center; padding: 20px; opacity: 0.6; grid-column: 1/-1;">Awaiting new orders...</div>';
         return;
     }
     
+    const fragment = document.createDocumentFragment();
+    
     gameState.orders.forEach(order => {
-        const card = document.createElement('div');
-        card.className = `order-card ${order.rare ? 'rare' : ''}`;
-        card.dataset.orderId = order.id;
+        let card = document.querySelector(`.order-card[data-order-id="${order.id}"]`);
+        
+        if (!card) {
+            card = document.createElement('div');
+            card.className = `order-card ${order.rare ? 'rare' : ''}`;
+            card.dataset.orderId = order.id;
+            
+            card.addEventListener('dragenter', e => {
+                e.preventDefault();
+                card.classList.add('drag-over');
+            });
+
+            card.addEventListener('dragover', e => {
+                e.preventDefault();
+            });
+            
+            card.addEventListener('dragleave', () => {
+                card.classList.remove('drag-over');
+            });
+            
+            card.addEventListener('drop', e => {
+                e.preventDefault();
+                card.classList.remove('drag-over');
+                const empId = e.dataTransfer.getData('text/plain');
+                assignEmployeeToOrder(empId, order.id);
+            });
+            
+            fragment.appendChild(card);
+        } else {
+            if (!card.classList.contains('drag-over')) {
+                card.classList.remove('drag-over');
+            }
+        }
         
         let partsText = Object.entries(order.partsRequired)
             .map(([p, qty]) => `${PART_ICONS[p]} x${qty}`).join(' ');
@@ -355,32 +388,25 @@ function renderOrders() {
                 <div class="progress-fill" style="width: ${progress}%"></div>
             </div>
             <div class="order-status">
-                ${assignedEmployee ? `🛠 ${assignedEmployee.avatar} работает` : '⏳ Ожидает'}
+                ${assignedEmployee ? `🛠 ${assignedEmployee.avatar} working` : '⏳ Waiting'}
             </div>
         `;
         
-        card.addEventListener('dragenter', e => {
-            e.preventDefault();
-            card.classList.add('drag-over');
-        });
-
-        card.addEventListener('dragover', e => {
-            e.preventDefault();
-        });
-        
-        card.addEventListener('dragleave', () => {
-            card.classList.remove('drag-over');
-        });
-        
-        card.addEventListener('drop', e => {
-            e.preventDefault();
-            card.classList.remove('drag-over');
-            const empId = e.dataTransfer.getData('text/plain');
-            assignEmployeeToOrder(empId, order.id);
-        });
-        
-        list.appendChild(card);
+        if (fragment.contains(card)) {
+            list.appendChild(card);
+        }
     });
+
+    const existingCardIds = new Set(gameState.orders.map(o => o.id.toString()));
+    Array.from(list.children).forEach(card => {
+        if (!card.classList.contains('drag-over') && card.dataset.orderId && !existingCardIds.has(card.dataset.orderId)) {
+            card.remove();
+        }
+    });
+    
+    if (fragment.children.length > 0) {
+        list.appendChild(fragment);
+    }
 }
 
 function assignEmployeeToOrder(empId, orderId) {
@@ -389,11 +415,11 @@ function assignEmployeeToOrder(empId, orderId) {
     
     if (!emp || !order) return;
     if (emp.isBusy) {
-        showNotification('Сотрудник занят!', 'error');
+        showNotification('Employee is busy!', 'error');
         return;
     }
     if (order.employeeId) {
-        showNotification('Заказ уже выполняется!', 'error');
+        showNotification('Order is already being serviced!', 'error');
         return;
     }
     
@@ -405,7 +431,7 @@ function assignEmployeeToOrder(empId, orderId) {
             const throttleDelay = 60000;
             
             if (currentTime - lastTime > throttleDelay) {
-                showNotification(`Недостаточно деталей: ${PART_ICONS[part]}`, 'error');
+                showNotification(`Insufficient parts: ${PART_ICONS[part]}`, 'error');
                 gameState.lastPartNotificationTime[part] = currentTime;
             }
             return;
@@ -418,11 +444,11 @@ function assignEmployeeToOrder(empId, orderId) {
         if (emp.perks.savePartChance && Math.random() < emp.perks.savePartChance) {
             actualQty = 0;
             createParticle('✨', 300, 300);
-            showNotification('Сотрудник сэкономил детали!', 'info');
+            showNotification('Employee saved parts!', 'info');
         } else if (emp.perks.breakPartChance && Math.random() < emp.perks.breakPartChance) {
             actualQty = qty * 2;
             createParticle('💥', 300, 300);
-            showNotification('Сотрудник сломал детали!', 'warning');
+            showNotification('Employee broke parts!', 'warning');
         }
         
         gameState.parts[part] = Math.max(0, (gameState.parts[part] || 0) - actualQty);
@@ -433,8 +459,8 @@ function assignEmployeeToOrder(empId, orderId) {
     order.timeRemaining = order.initialTime;
     
     createParticle('🔧', 500, 400);
-    renderEmployees();
-    renderOrders();
+    renderEmployees(); 
+    renderOrders(); 
     updateUI();
 }
 
@@ -468,7 +494,7 @@ function renderShop() {
                         <div class="shop-item-name">${PART_ICONS[part]} x${amount}</div>
                         <div class="shop-item-desc">💰 ${cost}</div>
                     </div>
-                    <button ${gameState.money < cost ? 'disabled' : ''}>Купить</button>
+                    <button ${gameState.money < cost ? 'disabled' : ''}>Buy</button>
                 `;
                 item.querySelector('button').onclick = () => buyPart(part, amount, cost);
                 container.appendChild(item);
@@ -483,11 +509,11 @@ function renderShop() {
         item.className = 'shop-item';
         item.innerHTML = `
             <div class="shop-item-info">
-                <div class="shop-item-name">👤 Нанять сотрудника</div>
-                <div class="shop-item-desc">Случайные перки и характеристики</div>
+                <div class="shop-item-name">👤 Hire Employee</div>
+                <div class="shop-item-desc">Random perks and stats</div>
                 <div class="shop-item-desc">💰 ${hireCost}</div>
             </div>
-            <button ${gameState.money < hireCost ? 'disabled' : ''}>Нанять</button>
+            <button ${gameState.money < hireCost ? 'disabled' : ''}>Hire</button>
         `;
         item.querySelector('button').onclick = hireEmployee;
         content.appendChild(item);
@@ -495,41 +521,41 @@ function renderShop() {
     else if (gameState.currentShopTab === 'upgrades') {
         const upgrades = [
             { 
-                name: '⚡ Ускорить всех сотрудников', 
+                name: '⚡ Speed up all employees', 
                 cost: GAME_CONFIG.upgradeCost, 
                 action: upgradeEmployees,
-                desc: `+${GAME_CONFIG.employeeSpeedIncrease} к скорости всех`
+                desc: `+${GAME_CONFIG.employeeSpeedIncrease} speed to all`
             },
             { 
-                name: '📦 Регулярные поставки', 
+                name: '📦 Regular Supplies', 
                 cost: GAME_CONFIG.supplyUpgradeCost, 
                 action: buySupply, 
                 disabled: gameState.supplyActive,
-                desc: 'Автоматическая доставка деталей каждые 35 сек'
+                desc: 'Automatic part delivery every 35 sec'
             },
             { 
-                name: '📋 Расширить лимит заказов', 
+                name: '📋 Expand Order Limit', 
                 cost: GAME_CONFIG.orderIncreaseCost, 
                 action: expandOrders,
-                desc: `+5 к максимуму заказов (текущий: ${gameState.maxOrderLimit})`
+                desc: `+5 to max orders (current: ${gameState.maxOrderLimit})`
             },
             { 
-                name: '🤖 Автоматизация сотрудника', 
+                name: '🤖 Employee Automation', 
                 cost: 5000, 
                 action: buyAutomation,
-                desc: 'Сотрудник будет брать заказы автоматически'
+                desc: 'Employee will take orders automatically'
             },
             { 
-                name: '👑 ПРЕСТИЖ', 
+                name: '👑 PRESTIGE', 
                 cost: GAME_CONFIG.prestigeCost, 
                 action: doPrestige,
-                desc: `Сброс игры с бонусом +10% ко всем наградам (текущий: ${gameState.prestige})`
+                desc: `Reset game for +10% bonus to all rewards (current: ${gameState.prestige})`
             },
             { 
-                name: '🔄 Сбросить игру', 
+                name: '🔄 Reset Game', 
                 cost: 0, 
                 action: resetGame,
-                desc: 'Полный сброс прогресса'
+                desc: 'Full progress reset'
             }
         ];
         
@@ -544,7 +570,7 @@ function renderShop() {
                     ${upg.cost > 0 ? `<div class="shop-item-desc">💰 ${upg.cost}</div>` : ''}
                 </div>
                 <button ${upg.disabled || !canAfford ? 'disabled' : ''}>
-                    ${upg.cost > 0 ? 'Купить' : 'Сброс'}
+                    ${upg.cost > 0 ? 'Buy' : 'Reset'}
                 </button>
             `;
             item.querySelector('button').onclick = upg.action;
@@ -561,7 +587,7 @@ function renderShop() {
                 <div class="achievement-info">
                     <div class="achievement-name">${ach.name}</div>
                     <div class="achievement-desc">${ach.desc}</div>
-                    <div class="achievement-reward">Награда: 💰 ${ach.reward}</div>
+                    <div class="achievement-reward">Reward: 💰 ${ach.reward}</div>
                 </div>
             `;
             content.appendChild(item);
@@ -575,7 +601,7 @@ function buyPart(part, amount, cost) {
         gameState.parts[part] += amount;
         updateUI();
         renderShop();
-        showNotification(`Куплено: ${PART_ICONS[part]} x${amount}`, 'success');
+        showNotification(`Bought: ${PART_ICONS[part]} x${amount}`, 'success');
         createParticle(PART_ICONS[part], 800, 300);
     }
 }
@@ -583,7 +609,7 @@ function buyPart(part, amount, cost) {
 function hireEmployee() {
     const cost = 100;
     if (gameState.money < cost) {
-        showNotification('Недостаточно денег!', 'error');
+        showNotification('Insufficient money!', 'error');
         return;
     }
     
@@ -593,7 +619,7 @@ function hireEmployee() {
         Math.floor(Math.random() * GAME_CONFIG.EMPLOYEE_AVATARS.length)
     ];
     
-    const names = ['Алекс', 'Мария', 'Иван', 'Анна', 'Петр', 'Елена', 'Дмитрий', 'Ольга'];
+    const names = ['Alex', 'Maria', 'Ivan', 'Anna', 'Peter', 'Helen', 'Dmitry', 'Olga'];
     const name = names[Math.floor(Math.random() * names.length)];
     
     const perks = {
@@ -617,10 +643,10 @@ function hireEmployee() {
     
     gameState.employees.push(employee);
     
-    renderEmployees();
+    renderEmployees(); 
     updateUI();
     renderShop();
-    showNotification(`Нанят: ${name} ${avatar}`, 'success');
+    showNotification(`Hired: ${name} ${avatar}`, 'success');
     checkAchievements();
 }
 
@@ -629,44 +655,44 @@ function fireEmployee(empId) {
     if (!emp) return;
     
     if (emp.isBusy) {
-        showNotification('Нельзя уволить занятого сотрудника!', 'error');
+        showNotification('Cannot fire a busy employee!', 'error');
         return;
     }
 
     if (emp.id === 'emp-starter') {
-        showNotification('Нельзя уволить стартового стажера!', 'error');
+        showNotification('Cannot fire the starter trainee!', 'error');
         return;
     }
 
     const severance = Math.floor(gameState.money * 0.10);
     
-    if (!confirm(`Уволить ${emp.name}? Это будет стоить ${severance} 💰 (10% выходного пособия).`)) {
+    if (!confirm(`Fire ${emp.name}? This will cost ${severance} 💰 (10% severance pay).`)) {
         return;
     }
 
     if (gameState.money < severance) {
-        showNotification('Недостаточно денег для выплаты пособия!', 'error');
+        showNotification('Insufficient money to pay severance!', 'error');
         return;
     }
 
     gameState.money -= severance;
     gameState.employees = gameState.employees.filter(e => e.id !== empId);
     
-    showNotification(`${emp.name} уволен. Выплачено ${severance} 💰.`, 'info');
+    showNotification(`${emp.name} fired. Paid ${severance} 💰.`, 'info');
     
-    renderEmployees();
+    renderEmployees(); 
     updateUI();
 }
 
 function upgradeEmployees() {
     const cost = GAME_CONFIG.upgradeCost;
     if (gameState.money < cost) {
-        showNotification('Недостаточно денег!', 'error');
+        showNotification('Insufficient money!', 'error');
         return;
     }
     
     if (gameState.employees.length === 0) {
-        showNotification('Нет сотрудников для улучшения!', 'error');
+        showNotification('No employees to upgrade!', 'error');
         return;
     }
     
@@ -675,8 +701,8 @@ function upgradeEmployees() {
         e.speed = Math.min(GAME_CONFIG.employeeMaxSpeed, e.speed + GAME_CONFIG.employeeSpeedIncrease);
     });
     
-    showNotification('Все сотрудники стали быстрее!', 'success');
-    renderEmployees();
+    showNotification('All employees became faster!', 'success');
+    renderEmployees(); 
     updateUI();
     renderShop();
 }
@@ -684,11 +710,11 @@ function upgradeEmployees() {
 function buySupply() {
     const cost = GAME_CONFIG.supplyUpgradeCost;
     if (gameState.money < cost) {
-        showNotification('Недостаточно денег!', 'error');
+        showNotification('Insufficient money!', 'error');
         return;
     }
     if (gameState.supplyActive) {
-        showNotification('Поставки уже активны!', 'warning');
+        showNotification('Supplies are already active!', 'warning');
         return;
     }
     
@@ -701,12 +727,12 @@ function buySupply() {
             for (const part in GAME_CONFIG.supplyAmount) {
                 gameState.parts[part] += GAME_CONFIG.supplyAmount[part];
             }
-            showNotification('📦 Поставка деталей получена!', 'success');
+            showNotification('📦 Parts supply received!', 'success');
             updateUI();
         }
     }, GAME_CONFIG.supplyInterval);
     
-    showNotification('Регулярные поставки активированы!', 'success');
+    showNotification('Regular supplies activated!', 'success');
     updateUI();
     renderShop();
 }
@@ -714,14 +740,14 @@ function buySupply() {
 function expandOrders() {
     const cost = GAME_CONFIG.orderIncreaseCost;
     if (gameState.money < cost) {
-        showNotification('Недостаточно денег!', 'error');
+        showNotification('Insufficient money!', 'error');
         return;
     }
     
     gameState.money -= cost;
     gameState.maxOrderLimit += 5;
     
-    showNotification('Лимит заказов увеличен!', 'success');
+    showNotification('Order limit increased!', 'success');
     updateUI();
     renderShop();
 }
@@ -729,36 +755,36 @@ function expandOrders() {
 function buyAutomation() {
     const cost = 5000;
     if (gameState.money < cost) {
-        showNotification('Недостаточно денег!', 'error');
+        showNotification('Insufficient money!', 'error');
         return;
     }
     
     const emp = gameState.employees.find(e => !e.autoWork);
     if (!emp) {
-        showNotification('Все сотрудники уже автоматизированы!', 'warning');
+        showNotification('All employees are already automated!', 'warning');
         return;
     }
     
     gameState.money -= cost;
     emp.autoWork = true;
     
-    showNotification(`${emp.name} теперь работает автоматически!`, 'success');
+    showNotification(`${emp.name} is now working automatically!`, 'success');
     updateUI();
     renderShop();
 }
 
 function doPrestige() {
     if (gameState.money < GAME_CONFIG.prestigeCost) {
-        showNotification('Недостаточно денег для престижа!', 'error');
+        showNotification('Insufficient money for prestige!', 'error');
         return;
     }
     
-    if (!confirm(`Престиж сбросит весь прогресс, но даст +10% ко всем наградам навсегда!\n\nТекущий бонус: +${gameState.prestige * 10}%\nНовый бонус: +${(gameState.prestige + 1) * 10}%\n\nПродолжить?`)) {
+    if (!confirm(`Prestige will reset all progress but grant a permanent +10% bonus to all rewards!\n\nCurrent Bonus: +${gameState.prestige * 10}%\nNew Bonus: +${(gameState.prestige + 1) * 10}%\n\nContinue?`)) {
         return;
     }
     
     if (gameState.supplyIntervalId) clearInterval(gameState.supplyIntervalId);
-    if (gameState.gameLoopIntervalId) clearInterval(gameState.gameLoopIntervalId);
+    if (gameState.gameLoopRequestId) cancelAnimationFrame(gameState.gameLoopRequestId);
     if (gameState.saveIntervalId) clearInterval(gameState.saveIntervalId);
     if (gameState.eventIntervalId) clearInterval(gameState.eventIntervalId);
     if (gameState.eventBadgeIntervalId) clearInterval(gameState.eventBadgeIntervalId);
@@ -773,27 +799,30 @@ function doPrestige() {
     gameState.supplyActive = false;
     gameState.supplyIntervalId = null;
     gameState.maxOrderLimit = GAME_CONFIG.maxOrders;
-    gameState.gameLoopIntervalId = null;
+    gameState.gameLoopRequestId = null;
     gameState.saveIntervalId = null;
     gameState.eventIntervalId = null;
     gameState.eventBadgeIntervalId = null;
     
-    showNotification(`🎉 Престиж ${gameState.prestige}! Бонус: +${gameState.prestige * 10}%`, 'success');
+    showNotification(`🎉 Prestige ${gameState.prestige}! Bonus: +${gameState.prestige * 10}%`, 'success');
     renderEmployees();
     renderOrders();
     renderShop();
     updateUI();
-    initIntervals();
+    initIntervals(); 
+    
+    document.getElementById('eventsBanner').innerHTML = '';
+    
     saveGame();
 }
 
 function resetGame() {
-    if (!confirm('Вы уверены? Весь прогресс будет потерян!')) return;
+    if (!confirm('Are you sure? All progress will be lost!')) return;
     
     window.removeEventListener('beforeunload', saveGame);
     
     if (gameState.supplyIntervalId) clearInterval(gameState.supplyIntervalId);
-    if (gameState.gameLoopIntervalId) clearInterval(gameState.gameLoopIntervalId);
+    if (gameState.gameLoopRequestId) cancelAnimationFrame(gameState.gameLoopRequestId);
     if (gameState.saveIntervalId) clearInterval(gameState.saveIntervalId);
     if (gameState.eventIntervalId) clearInterval(gameState.eventIntervalId);
     if (gameState.eventBadgeIntervalId) clearInterval(gameState.eventBadgeIntervalId);
@@ -838,7 +867,7 @@ function showAchievementUnlock(ach) {
     popup.className = 'notification success';
     popup.style.border = '2px solid gold';
     popup.innerHTML = `
-        <div style="font-size: 1.5em; margin-bottom: 5px;">${ach.icon} Достижение!</div>
+        <div style="font-size: 1.5em; margin-bottom: 5px;">${ach.icon} Achievement!</div>
         <div style="font-weight: bold;">${ach.name}</div>
         <div style="opacity: 0.8;">${ach.desc}</div>
         <div style="color: #fbbf24; margin-top: 5px;">+${ach.reward} 💰</div>
@@ -883,7 +912,7 @@ function triggerRandomEvent() {
 function showEventBadge(event) {
     const badge = document.createElement('div');
     badge.className = `event-badge ${event.type}`;
-    badge.innerHTML = `${event.icon} ${event.name}`;
+    badge.textContent = `${event.icon} ${event.name}`;
     
     document.getElementById('eventsBanner').appendChild(badge);
     
@@ -902,15 +931,28 @@ function showEventBadge(event) {
 
 function renderEventBadges() {
     const banner = document.getElementById('eventsBanner');
-    banner.innerHTML = '';
     
     gameState.activeEvents.forEach(evt => {
         const remaining = Math.max(0, Math.ceil((evt.endTime - Date.now()) / 1000));
+        
+        let badge = document.querySelector(`.event-badge[data-event-name="${evt.name}"]`);
+        
         if (remaining > 0) {
-            const badge = document.createElement('div');
-            badge.className = 'event-badge positive';
+            if (!badge) {
+                badge = document.createElement('div');
+                badge.className = `event-badge positive`;
+                badge.dataset.eventName = evt.name;
+                banner.appendChild(badge);
+            }
             badge.textContent = `${evt.name} (${remaining}s)`;
-            banner.appendChild(badge);
+        } else if (badge) {
+            badge.remove();
+        }
+    });
+
+    Array.from(banner.children).forEach(badge => {
+        if (!gameState.activeEvents.some(e => e.name === badge.dataset.eventName)) {
+            badge.remove();
         }
     });
 }
@@ -942,12 +984,34 @@ function createParticle(emoji, x, y) {
     setTimeout(() => particle.remove(), 1500);
 }
 
-function gameLoop() {
+let lastTimestamp = 0;
+const ORDER_PROCESSING_INTERVAL = 100;
+
+function gameTick(timestamp) {
+    gameState.gameLoopRequestId = requestAnimationFrame(gameTick);
+
+    if (timestamp - lastTimestamp < ORDER_PROCESSING_INTERVAL) {
+        gameState.orders.forEach(order => {
+            if (order.employeeId) {
+                const card = document.querySelector(`.order-card[data-order-id="${order.id}"]`);
+                if (card) {
+                    const progress = Math.min(100, 100 - (order.timeRemaining / order.initialTime) * 100);
+                    const fill = card.querySelector('.progress-fill');
+                    if (fill) fill.style.width = `${progress}%`;
+                }
+            }
+        });
+        return;
+    }
+    lastTimestamp = timestamp;
+
     if (Date.now() - gameState.lastOrderTime > GAME_CONFIG.orderInterval) {
         createOrder();
         gameState.lastOrderTime = Date.now();
     }
     
+    let ordersCompleted = false;
+
     gameState.employees.forEach(emp => {
         if (emp.autoWork && !emp.isBusy) {
             const order = gameState.orders.find(o => !o.employeeId);
@@ -963,7 +1027,7 @@ function gameLoop() {
             if (emp) {
                 const speedWithPerks = emp.speed * (1 + (emp.perks?.speedBonus || 0));
                 const speedMultiplier = gameState.speedMultiplier || 1;
-                order.timeRemaining -= speedWithPerks * speedMultiplier;
+                order.timeRemaining -= speedWithPerks * speedMultiplier * (ORDER_PROCESSING_INTERVAL / 100); 
                 
                 if (order.timeRemaining <= 0 && !order.completed) {
                     let reward = order.reward;
@@ -977,6 +1041,7 @@ function gameLoop() {
                     
                     gameState.money += reward;
                     gameState.totalOrdersCompleted++;
+                    ordersCompleted = true; 
                     
                     if (order.rare) {
                         gameState.rareOrdersCompleted = (gameState.rareOrdersCompleted || 0) + 1;
@@ -990,7 +1055,8 @@ function gameLoop() {
                         const expBoost = emp.perks?.expBoost || 0;
                         const speedGain = 1 * (1 + expBoost);
                         emp.speed = Math.min(GAME_CONFIG.employeeMaxSpeed, emp.speed + speedGain);
-                        showNotification(`${emp.name} повысил навык! Скорость: ${emp.speed.toFixed(1)}`, 'success');
+                        showNotification(`${emp.name} skill improved! Speed: ${emp.speed.toFixed(1)}`, 'success');
+                        renderEmployees(); 
                     }
                     
                     incrementCombo();
@@ -999,7 +1065,7 @@ function gameLoop() {
                     createParticle('💰', 600, 300);
                     if (order.rare) {
                         createParticle('⭐', 620, 280);
-                        showNotification(`Редкий заказ выполнен! +${reward} 💰`, 'success');
+                        showNotification(`Rare order completed! +${reward} 💰`, 'success');
                     }
                     
                     checkAchievements();
@@ -1008,11 +1074,16 @@ function gameLoop() {
         }
     });
     
+    const initialOrderCount = gameState.orders.length;
     gameState.orders = gameState.orders.filter(o => !o.completed);
+    const finalOrderCount = gameState.orders.length;
+
+    if (ordersCompleted || initialOrderCount !== finalOrderCount) {
+        renderOrders();
+        renderEmployees();
+    }
     
     updateUI();
-    renderOrders();
-    renderEmployees();
 }
 
 function setupShopTabs() {
@@ -1027,23 +1098,32 @@ function setupShopTabs() {
 }
 
 function initIntervals() {
-    if (gameState.gameLoopIntervalId) clearInterval(gameState.gameLoopIntervalId);
-    gameState.gameLoopIntervalId = setInterval(gameLoop, 100);
-    
+    if (gameState.gameLoopRequestId) cancelAnimationFrame(gameState.gameLoopRequestId);
     if (gameState.saveIntervalId) clearInterval(gameState.saveIntervalId);
-    gameState.saveIntervalId = setInterval(saveGame, 5000);
-    
     if (gameState.eventIntervalId) clearInterval(gameState.eventIntervalId);
-    gameState.eventIntervalId = setInterval(triggerRandomEvent, 60000);
-
     if (gameState.eventBadgeIntervalId) clearInterval(gameState.eventBadgeIntervalId);
-    gameState.eventBadgeIntervalId = setInterval(renderEventBadges, 1000);
+    
+    gameState.gameLoopRequestId = requestAnimationFrame(gameTick);
+    
+    gameState.saveIntervalId = setInterval(saveGame, 5000);
+    gameState.eventIntervalId = setInterval(triggerRandomEvent, 60000);
+    gameState.eventBadgeIntervalId = setInterval(renderEventBadges, 1000); 
+    
+    if (gameState.supplyActive) {
+        gameState.supplyIntervalId = setInterval(() => {
+            for (const part in GAME_CONFIG.supplyAmount) {
+                gameState.parts[part] += GAME_CONFIG.supplyAmount[part];
+            }
+            showNotification('📦 Parts supply received!', 'success');
+            updateUI();
+        }, GAME_CONFIG.supplyInterval);
+    }
 }
 
 function init() {
     loadGame();
     setupShopTabs();
-    
+
     document.getElementById('employeeList').addEventListener('click', e => {
         if (e.target.classList.contains('fire-employee-btn')) {
             e.stopPropagation();
@@ -1052,29 +1132,28 @@ function init() {
         }
     });
 
-    renderEmployees();
-    renderOrders();
-    renderShop();
-    updateUI();
-    
     if (gameState.employees.length === 0) {
         const avatar = GAME_CONFIG.EMPLOYEE_AVATARS[0];
         gameState.employees.push({
             id: 'emp-starter',
             avatar,
-            name: 'Стажер',
+            name: 'Trainee',
             speed: 1,
             isBusy: false,
             ordersCompleted: 0,
             autoWork: false,
             perks: {}
         });
-        renderEmployees();
     }
+
+    renderEmployees();
+    renderOrders();
+    renderShop();
+    updateUI();
     
     initIntervals();
     
-    showNotification('Игра загружена! Добро пожаловать! 🔧', 'success');
+    showNotification('Game loaded! Welcome! 🔧', 'success');
 }
 
 window.addEventListener('load', init);
