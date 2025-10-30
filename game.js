@@ -1,5 +1,5 @@
 const GAME_CONFIG = {
-    startMoney: 10000,
+    startMoney: 7000,
     startParts: { battery: 5, motherboard: 5, cpu: 5, gpu: 5, case: 5, ram: 5 },
     partCost: { battery: 10, motherboard: 50, cpu: 40, gpu: 100, case: 25, ram: 20 },
     upgradeCost: 100,
@@ -215,8 +215,16 @@ function loadGame() {
     }
 }
 
+function calculateBasePartsCost(partsRequired) {
+    let totalCost = 0;
+    for (const [part, qty] of Object.entries(partsRequired)) {
+        totalCost += (GAME_CONFIG.partCost[part] || 0) * qty;
+    }
+    return totalCost;
+}
+
 function createOrder() {
-    if (gameState.orders.length >= gameState.maxOrderLimit) return;
+    if (gameState.orders.length >= gameState.maxOrderLimit) return; 
     
     const available = ORDER_TEMPLATES.filter(o => gameState.totalOrdersCompleted >= o.minCompleted);
     if (!available.length) return;
@@ -235,9 +243,16 @@ function createOrder() {
         partsRequired[part] = Math.max(1, Math.round(qty * (0.8 + Math.random() * 0.4)));
     }
     
-    let reward = Math.round(tpl.baseReward * (0.8 + Math.random() * 0.4) * getPrestigeBonus());
-    if (tpl.rare) reward = Math.round(reward * 2);
-    if (gameState.rewardMultiplier) reward = Math.round(reward * gameState.rewardMultiplier);
+    const basePartsCost = calculateBasePartsCost(partsRequired);
+    const baseTime = tpl.baseTime;
+    let baseReward = (basePartsCost * 1.3) + (baseTime * 1.5);
+    let reward = baseReward * (0.8 + Math.random() * 0.4); 
+    reward *= getPrestigeBonus(); 
+    if (tpl.rare) reward *= 2; 
+    if (gameState.rewardMultiplier) reward *= gameState.rewardMultiplier;
+    
+    reward = Math.round(reward);
+
     
     const order = {
         id: gameState.orderCount++,
@@ -253,7 +268,7 @@ function createOrder() {
     };
     
     gameState.orders.push(order);
-    renderOrders(); 
+    renderOrders();
 }
 
 function renderEmployees() {
