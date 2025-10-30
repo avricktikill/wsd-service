@@ -1,10 +1,11 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WSD Service</title>
-<link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="WSD Service - Repair Management Game">
+    <title>WSD Service</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div class="container">
@@ -14,56 +15,59 @@
 
     <div class="stats-panel">
         <div class="stat-card">
-            <div class="stat-label">💰 Деньги</div>
+            <div class="stat-label">💰 Money</div>
             <div class="stat-value" id="money">0</div>
         </div>
         <div class="stat-card">
-            <div class="stat-label">📦 Детали</div>
-            <div class="stat-value" id="parts">-</div>
+            <div class="stat-label">📦 Parts</div>
+            <div class="stat-value" id="parts" style="font-size:1.2em;">0</div>
         </div>
         <div class="stat-card">
-            <div class="stat-label">✅ Выполнено</div>
+            <div class="stat-label">✅ Done</div>
             <div class="stat-value" id="completed">0</div>
         </div>
         <div class="stat-card">
-            <div class="stat-label">⚡ Комбо</div>
-            <div class="stat-value" id="combo">0x</div>
+            <div class="stat-label">⚡ Combo</div>
+            <div class="stat-value" id="combo">0</div>
         </div>
         <div class="stat-card">
-            <div class="stat-label">🏆 Престиж</div>
+            <div class="stat-label">👑 Prestige</div>
             <div class="stat-value" id="prestige">0</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">💼 Next Salary</div>
+            <div class="stat-value" id="next-salary" style="font-size:1em;">3h 0m 0s</div>
         </div>
     </div>
 
     <div class="game-grid">
         <div class="employees-section">
-            <h2 class="section-title">👥 Сотрудники</h2>
-            <div id="employeeList"></div>
+            <h2 class="section-title">👥 Employees</h2>
+            <div id="employeeList" class="employee-container"></div>
         </div>
 
         <div class="orders-section">
-            <h2 class="section-title">📋 Заказы</h2>
+            <h2 class="section-title">📋 Orders</h2>
             <div class="orders-grid" id="orderList"></div>
         </div>
 
         <div class="shop-section">
-            <h2 class="section-title">🏪 Магазин</h2>
-            <div class="shop-tabs">
-                <div class="shop-tab active" data-tab="parts">Детали</div>
-                <div class="shop-tab" data-tab="employees">Сотрудники</div>
-                <div class="shop-tab" data-tab="upgrades">Улучшения</div>
-                <div class="shop-tab" data-tab="achievements">Достижения</div>
-            </div>
-            <div id="shopContent"></div>
+            <h2 class="section-title">🏪 Shop</h2>
+            <nav class="shop-tabs">
+                <button class="shop-tab active" data-tab="parts">Parts</button>
+                <button class="shop-tab" data-tab="employees">Hire</button>
+                <button class="shop-tab" data-tab="upgrades">Upgrades</button>
+                <button class="shop-tab" data-tab="achievements">Rewards</button>
+            </nav>
+            <div id="shopContent" class="shop-content"></div>
         </div>
     </div>
 </div>
 
-<div class="events-banner" id="eventsBanner"></div>
-<div id="notificationContainer"></div>
+<div class="events-banner" id="eventsBanner" role="alert" aria-live="polite"></div>
+<div id="notificationContainer" role="log" aria-live="polite"></div>
 <div id="particleContainer"></div>
 
-<script src="game.js"></script>
+<script src="game.js" defer></script>
 </body>
-
 </html>
