@@ -1,74 +1,88 @@
+const CLOUD_SAVE_URL = 'https://api.jsonstorage.net/v1/json/'; 
+
+let CLOUD_SAVE_KEY = null;   
+let CLOUD_API_KEY = null;   
+
 const GAME_CONFIG = {
-    startMoney: 2500,
+    startMoney: 1500, 
     startParts: { battery: 2, motherboard: 1, cpu: 1, gpu: 0, case: 1, ram: 2 },
     partCost: { battery: 30, motherboard: 140, cpu: 180, gpu: 400, case: 90, ram: 120 },
     partDemandMultiplier: { battery: 1.1, motherboard: 1.2, cpu: 1.25, gpu: 1.35, case: 1.1, ram: 1.2 },
-    upgradeCost: 300,
+    upgradeCost: 500, 
     supplyUpgradeCost: 18000,
-    supplyInterval: 40000,
+    baseSupplyInterval: 40000, 
     supplyAmount: { battery: 1, motherboard: 1, cpu: 1, gpu: 0, case: 1, ram: 1 },
     employeeSpeedIncrease: 0.4,
     orderInterval: 6000,
-    employeeSpeedIncrementEvery: 10,
     maxOrders: 4,
     orderIncreaseCost: 10000,
     employeeMaxSpeed: 7,
     EMPLOYEE_AVATARS: ['👨‍🔧','👩‍🔧','👨‍🔬','👩‍🔬','🧑‍💻','👨‍🏭'],
     comboDecayTime: 7000,
-    prestigeCost: 200000,
+    prestigeCost: 300000, 
     salaryInterval: 10800000,
     baseSalary: 60,
     failurePenalty: 0.2,
-    marketVolatility: 0.35
+    marketVolatility: 0.35,
+    inventoryPressureDecay: 0.05,
+    inventoryPressureEffect: 0.02 
 };
 
 const PART_ICONS = { 
     battery:'🔋', motherboard:'💻', cpu:'🖥️', gpu:'🎮', case:'🖱️', ram:'💿' 
 };
 
+const ORDER_PROCESSING_INTERVAL = 200; 
+let lastTimestamp = 0;
+let needsEmployeeRender = false;
+let needsOrderRender = false;
+
 let gameState = {
     money: GAME_CONFIG.startMoney,
     parts: {...GAME_CONFIG.startParts},
+    orderCount: 0,
     employees: [],
     orders: [],
-    lastOrderTime: Date.now(),
-    orderCount: 0,
     totalOrdersCompleted: 0,
     totalOrdersFailed: 0,
-    rareOrdersCompleted: 0, 
-    currentShopTab: 'parts',
+    totalSpent: 0,
+    totalEarned: 0,
     supplyActive: false,
     supplyIntervalId: null,
-    combo: 0,
-    comboTimer: null,
-    prestige: 0,
-    achievements: [],
-    activeEvents: [],
-    lastPartNotificationTime: {},
-    maxOrderLimit: GAME_CONFIG.maxOrders,
-    gameLoopRequestId: null, 
+    gameLoopRequestId: null,
     saveIntervalId: null,
     eventIntervalId: null,
     eventBadgeIntervalId: null,
     salaryIntervalId: null,
     priceUpdateIntervalId: null,
+    currentShopTab: 'parts',
+    rewardMultiplier: 1,
+    costMultiplier: 1,
+    combo: 0,
+    comboTimer: null,
+    achievements: [],
+    prestige: 0,
+    activeEvents: [],
+    rareOrdersCompleted: 0,
+    maxOrderLimit: GAME_CONFIG.maxOrders,
     lastSalaryTime: Date.now(),
+    lastOrderTime: Date.now(),
     partPrices: {...GAME_CONFIG.partCost},
-    totalSpent: 0,
-    totalEarned: 0,
     failedOrderPenalty: 0,
-    supplyBoost: 0
+    supplyBoost: 0,
+    speedMultiplier: 1,
+    inventoryPressure: Object.fromEntries(Object.keys(GAME_CONFIG.partCost).map(key => [key, 0])) 
 };
 
 const ORDER_TEMPLATES = [
-    { type: 'Phone', minCompleted: 0, baseParts: { battery:1, cpu:1, ram:1 }, baseTime: 150, baseReward: 80 },
-    { type: 'Laptop', minCompleted: 8, baseParts: { battery:2, cpu:1, ram:2, motherboard:1 }, baseTime: 220, baseReward: 200 },
-    { type: 'PC', minCompleted: 20, baseParts: { cpu:1, gpu:1, ram:2, motherboard:1, case:1 }, baseTime: 300, baseReward: 350 },
-    { type: 'Server', minCompleted: 40, baseParts: { cpu:2, ram:4, motherboard:2, case:1, gpu:1 }, baseTime: 450, baseReward: 800 },
+    { type: 'Phone', minCompleted: 0, baseParts: { battery:1, cpu:1, ram:1 }, baseTime: 220, baseReward: 80 },
+    { type: 'Laptop', minCompleted: 8, baseParts: { battery:2, cpu:1, ram:2, motherboard:1 }, baseTime: 320, baseReward: 200 },
+    { type: 'PC', minCompleted: 20, baseParts: { cpu:1, gpu:1, ram:2, motherboard:1, case:1 }, baseTime: 400, baseReward: 350 },
+    { type: 'Server', minCompleted: 40, baseParts: { cpu:2, ram:4, motherboard:2, case:1, gpu:1 }, baseTime: 550, baseReward: 800 },
     { type: 'Supercomputer', minCompleted: 60, baseParts: { cpu:4, ram:8, motherboard:2, case:2, gpu:4, battery:4 }, baseTime: 700, baseReward: 2500, rare: true },
-    { type: 'Tablet', minCompleted: 12, baseParts: { battery:2, ram:2, cpu:1 }, baseTime: 170, baseReward: 120 },
-    { type: 'Gaming Console', minCompleted: 25, baseParts: { cpu:1, gpu:2, ram:2, case:1 }, baseTime: 280, baseReward: 280 },
-    { type: 'Workstation', minCompleted: 35, baseParts: { cpu:2, gpu:2, ram:4, motherboard:1, case:1 }, baseTime: 380, baseReward: 550, rare: true },
+    { type: 'Tablet', minCompleted: 12, baseParts: { battery:2, ram:2, cpu:1 }, baseTime: 270, baseReward: 120 },
+    { type: 'Gaming Console', minCompleted: 25, baseParts: { cpu:1, gpu:2, ram:2, case:1 }, baseTime: 380, baseReward: 280 },
+    { type: 'Workstation', minCompleted: 35, baseParts: { cpu:2, gpu:2, ram:4, motherboard:1, case:1 }, baseTime: 480, baseReward: 550, rare: true },
 ];
 
 const PROFESSIONS = [
@@ -83,7 +97,7 @@ const PROFESSIONS = [
     {
         id: 'warehouse',
         name: 'Warehouse Manager',
-        desc: 'High part saving',
+        desc: 'High part saving, improves supply',
         costMultiplier: 1.4,
         salaryMultiplier: 1.3,
         perks: { savePartChance: 0.35, speedBonus: 0 }
@@ -91,7 +105,7 @@ const PROFESSIONS = [
     {
         id: 'courier',
         name: 'Courier',
-        desc: 'Speed & rewards',
+        desc: 'Speed & rewards, quick delivery',
         costMultiplier: 1.5,
         salaryMultiplier: 1.4,
         perks: { speedBonus: 0.25, bonusReward: 0.20 }
@@ -99,7 +113,7 @@ const PROFESSIONS = [
     {
         id: 'qa',
         name: 'QA Engineer',
-        desc: 'No breaks, exp boost',
+        desc: 'No breaks, exp boost, better rare handling',
         costMultiplier: 1.6,
         salaryMultiplier: 1.5,
         perks: { breakPartChance: 0, expBoost: 0.25, savePartChance: 0.15 }
@@ -107,39 +121,23 @@ const PROFESSIONS = [
 ];
 
 const CLIENT_NOTES = [
-    "Fell into water...",
-    "Confused with nutcracker 🎃",
-    "Took apart for SMS",
-    "Burned playing Snake 🔥",
-    "Microwave charge fail 🤷",
-    "Cat litter box 🐈",
-    "Sandwich inside 🥪",
-    "Sat on it, crunchy",
-    "Dark Souls trauma",
-    "Tea kettle plug ☕",
-    "Power supply heater",
-    "Vacuum ate GPU 🌀"
+    "Fell into water...", "Confused with nutcracker 🎃", "Took apart for SMS", "Burned playing Snake 🔥",
+    "Microwave charge fail 🤷", "Cat litter box 🐈", "Sandwich inside 🥪", "Sat on it, crunchy",
+    "Dark Souls trauma", "Tea kettle plug ☕", "Power supply heater", "Vacuum ate GPU 🌀"
 ];
 
 const ACHIEVEMENTS = [
-    { id: 'first_order', name: 'First Order', desc: 'Complete first order', icon: '🎯', check: s => s.totalOrdersCompleted >= 1, reward: 250 },
-    { id: 'ten_orders', name: 'Experienced', desc: 'Complete 10 orders', icon: '⚡', check: s => s.totalOrdersCompleted >= 10, reward: 1000 },
-    { id: 'fifty_orders', name: 'Professional', desc: 'Complete 50 orders', icon: '🏆', check: s => s.totalOrdersCompleted >= 50, reward: 4000 },
-    { id: 'hundred_orders', name: 'Legend', desc: 'Complete 100 orders', icon: '👑', check: s => s.totalOrdersCompleted >= 100, reward: 10000 },
-    { id: 'rich', name: 'Wealthy', desc: 'Have 100k money', icon: '💰', check: s => s.money >= 100000, reward: 3000 },
-    { id: 'team', name: 'Teamwork', desc: 'Hire 5 employees', icon: '👥', check: s => s.employees.length >= 5, reward: 3500 },
-    { id: 'combo_master', name: 'Combo Master', desc: 'Get x10 combo', icon: '🔥', check: s => s.combo >= 10, reward: 2000 },
-    { id: 'rare_order', name: 'Rare Client', desc: 'Complete rare order', icon: '⭐', check: s => s.rareOrdersCompleted >= 1, reward: 2500 },
-    { id: 'survivor', name: 'Survivor', desc: 'Fail 10 orders', icon: '💀', check: s => s.totalOrdersFailed >= 10, reward: 800 },
-    { id: 'profitable', name: 'Profitable', desc: 'Earn 50k profit', icon: '📈', check: s => (s.totalEarned - s.totalSpent) >= 50000, reward: 5000 },
+    { id: 'first_order', name: 'First Blood', icon: '⭐', desc: 'Complete 1 order.', reward: 500, check: (g) => g.totalOrdersCompleted >= 1 },
+    { id: 'rookie_orders', name: 'Rookie Fixer', icon: '🛠️', desc: 'Complete 10 orders.', reward: 2500, check: (g) => g.totalOrdersCompleted >= 10 },
+    { id: 'pro_orders', name: 'Pro Service', icon: '🥇', desc: 'Complete 50 orders.', reward: 10000, check: (g) => g.totalOrdersCompleted >= 50 },
+    { id: 'master_orders', name: 'Master Workshop', icon: '🏆', desc: 'Complete 100 orders.', reward: 50000, check: (g) => g.totalOrdersCompleted >= 100 },
+    { id: 'rich', name: 'Millionaire', icon: '💸', desc: 'Have 100,000 money at once.', reward: 20000, check: (g) => g.money >= 100000 },
+    { id: 'team', name: 'Team Builder', icon: '🧑‍🤝‍🧑', desc: 'Hire 5 employees.', reward: 15000, check: (g) => g.employees.length >= 5 },
+    { id: 'combo_master', name: 'Combo Master', icon: '⚡', desc: 'Reach 10x Combo.', reward: 10000, check: (g) => g.combo >= 10 },
+    { id: 'survivor', name: 'The Unsinkable', icon: '⚓', desc: 'Fail 10 orders.', reward: 5000, check: (g) => g.totalOrdersFailed >= 10 },
+    { id: 'profitable', name: 'Highly Profitable', icon: '📈', desc: 'Net profit of 50,000.', reward: 10000, check: (g) => (g.totalEarned - g.totalSpent) >= 50000 },
+    { id: 'rare_order', name: 'Rare Client', icon: '💎', desc: 'Complete a Rare order.', reward: 10000, check: (g) => g.rareOrdersCompleted >= 1 }
 ];
-
-const ROLE_PREFERENCES = {
-    courier: order => order.initialTime >= 220, 
-    warehouse: order => Object.keys(order.partsRequired).length >= 3, 
-    qa: order => order.rare, 
-    technician: () => true 
-};
 
 const PERK_TOOLTIPS = {
     speedBonus: '⚡ Work speed',
@@ -155,39 +153,17 @@ const ROLE_ICONS = {
 
 const RANDOM_EVENTS = [
     {
-        name: 'Rush Hour',
-        type: 'positive',
-        duration: 25000,
-        icon: '⚡',
-        desc: 'Rewards +60%!',
-        apply: () => {
-            gameState.rewardMultiplier = (gameState.rewardMultiplier || 1) * 1.6;
-        },
-        revert: () => {
-            gameState.rewardMultiplier = (gameState.rewardMultiplier || 1) / 1.6;
-        }
+        name: 'Rush Hour', type: 'positive', duration: 25000, icon: '⚡', desc: 'Rewards +60%!',
+        apply: () => { gameState.rewardMultiplier *= 1.6; },
+        revert: () => { gameState.rewardMultiplier /= 1.6; }
     },
     {
-        name: 'Supplier Sale',
-        type: 'positive',
-        duration: 30000,
-        icon: '💸',
-        desc: 'Parts -50%!',
-        apply: () => {
-            gameState.costMultiplier = (gameState.costMultiplier || 1) * 0.5;
-            updatePartPrices();
-        },
-        revert: () => {
-            gameState.costMultiplier = (gameState.costMultiplier || 1) / 0.5;
-            updatePartPrices();
-        }
+        name: 'Supplier Sale', type: 'positive', duration: 30000, icon: '💸', desc: 'Parts -50%!',
+        apply: () => { gameState.costMultiplier *= 0.5; updatePartPrices(); },
+        revert: () => { gameState.costMultiplier /= 0.5; updatePartPrices(); }
     },
     {
-        name: 'Parts Loss',
-        type: 'negative',
-        duration: 0,
-        icon: '💥',
-        desc: 'Lost parts!',
+        name: 'Parts Loss', type: 'negative', duration: 0, icon: '💥', desc: 'Lost parts!',
         apply: () => {
             const parts = Object.keys(gameState.parts).filter(p => gameState.parts[p] > 0);
             if (parts.length) {
@@ -201,11 +177,7 @@ const RANDOM_EVENTS = [
         revert: () => {}
     },
     {
-        name: 'Bonus',
-        type: 'positive',
-        duration: 0,
-        icon: '🎁',
-        desc: 'Money bonus!',
+        name: 'Bonus', type: 'positive', duration: 0, icon: '🎁', desc: 'Money bonus!',
         apply: () => {
             const bonus = 1000 + Math.floor(Math.random() * 2000);
             gameState.money += bonus;
@@ -217,43 +189,19 @@ const RANDOM_EVENTS = [
         revert: () => {}
     },
     {
-        name: 'Strike',
-        type: 'negative',
-        duration: 20000,
-        icon: '🚫',
-        desc: 'Speed -70%!',
-        apply: () => {
-            gameState.speedMultiplier = (gameState.speedMultiplier || 1) * 0.3;
-        },
-        revert: () => {
-            gameState.speedMultiplier = (gameState.speedMultiplier || 1) / 0.3;
-        }
+        name: 'Strike', type: 'negative', duration: 20000, icon: '🚫', desc: 'Speed -70%!',
+        apply: () => { gameState.speedMultiplier *= 0.3; },
+        revert: () => { gameState.speedMultiplier /= 0.3; }
     },
     {
-        name: 'Price Surge',
-        type: 'negative',
-        duration: 35000,
-        icon: '📉',
-        desc: 'Parts +100%!',
-        apply: () => {
-            gameState.costMultiplier = (gameState.costMultiplier || 1) * 2;
-            updatePartPrices();
-        },
-        revert: () => {
-            gameState.costMultiplier = (gameState.costMultiplier || 1) / 2;
-            updatePartPrices();
-        }
+        name: 'Price Surge', type: 'negative', duration: 35000, icon: '📉', desc: 'Parts +100%!',
+        apply: () => { gameState.costMultiplier *= 2; updatePartPrices(); },
+        revert: () => { gameState.costMultiplier /= 2; updatePartPrices(); }
     },
     {
-        name: 'Ad Campaign',
-        type: 'positive',
-        duration: 0,
-        icon: '📢',
-        desc: 'New orders!',
+        name: 'Ad Campaign', type: 'positive', duration: 0, icon: '📢', desc: 'New orders!',
         apply: () => {
-            for (let i = 0; i < 3; i++) {
-                createOrder();
-            }
+            for (let i = 0; i < 3; i++) createOrder();
             showNotification('Got 3 new orders!', 'success');
         },
         revert: () => {}
@@ -269,44 +217,121 @@ function getPrestigeBonus() {
 }
 
 function updatePartPrices() {
-    const costMult = gameState.costMultiplier || 1;
+    const costMult = gameState.costMultiplier;
     Object.keys(GAME_CONFIG.partCost).forEach(part => {
         const basePrice = GAME_CONFIG.partCost[part];
-        const demandMult = GAME_CONFIG.partDemandMultiplier[part] || 1;
+        const demandMult = GAME_CONFIG.partDemandMultiplier[part];
         const volatility = 1 + (Math.random() - 0.5) * GAME_CONFIG.marketVolatility;
-        gameState.partPrices[part] = Math.max(10, Math.floor(basePrice * demandMult * costMult * volatility));
+        
+        let pressure = gameState.inventoryPressure[part];
+        pressure = Math.max(0, pressure - GAME_CONFIG.inventoryPressureDecay); 
+        gameState.inventoryPressure[part] = pressure; 
+        
+        const pressureEffect = 1 + (pressure * GAME_CONFIG.inventoryPressureEffect); 
+        gameState.partPrices[part] = Math.max(10, Math.floor(basePrice * demandMult * costMult * volatility * pressureEffect));
     });
-    if (gameState.currentShopTab === 'parts') {
-        renderShop();
+    
+    if (gameState.currentShopTab === 'parts') renderShop();
+}
+
+function getSaveDataForCloud() {
+    return {
+        ...gameState,
+        supplyIntervalId: null,
+        gameLoopRequestId: null, 
+        saveIntervalId: null,
+        eventIntervalId: null,
+        eventBadgeIntervalId: null,
+        salaryIntervalId: null,
+        priceUpdateIntervalId: null,
+        comboTimer: null
+    };
+}
+
+async function uploadSaveToCloud() {
+    if (!CLOUD_SAVE_KEY || !CLOUD_API_KEY) {
+        showNotification('Enter Cloud Key AND API Key first!', 'error');
+        return;
     }
+
+    const saveData = getSaveDataForCloud();
+    try {
+        const response = await fetch(CLOUD_SAVE_URL + CLOUD_SAVE_KEY, {
+            method: 'POST', 
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Api-Key': CLOUD_API_KEY
+            },
+            body: JSON.stringify(saveData),
+        });
+
+        if (response.ok) {
+            showNotification('Cloud Save Successful! 💾', 'success');
+        } else {
+            showNotification('Cloud Save Failed! (Check Keys/API Status)', 'error');
+        }
+    } catch (e) {
+        showNotification('Network Error: Could not connect to Cloud.', 'error');
+    }
+}
+
+async function downloadSaveFromCloud() {
+    if (!CLOUD_SAVE_KEY) {
+        showNotification('Enter Cloud Key first!', 'error');
+        return;
+    }
+
+    try {
+        const headers = CLOUD_API_KEY ? { 'X-Api-Key': CLOUD_API_KEY } : {};
+        const response = await fetch(CLOUD_SAVE_URL + CLOUD_SAVE_KEY, {
+            method: 'GET',
+            headers
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            if (data?.money !== undefined && data?.orders !== undefined) { 
+                if (confirm('Load cloud data? Current progress will be overwritten.')) {
+                    localStorage.setItem('wsdServiceSave', JSON.stringify(data));
+                    showNotification('Cloud Data Loaded! Restarting...', 'success');
+                    window.location.reload(); 
+                    return true;
+                }
+            } else {
+                showNotification('No valid data found in Cloud for this key.', 'warning');
+            }
+        } else if (response.status === 404) {
+             showNotification('Cloud Key not found. Use SAVE to create it.', 'warning');
+        } else {
+            showNotification('Cloud Load Failed! (Check API Key)', 'error');
+        }
+    } catch (e) {
+        showNotification('Network Error: Could not connect to Cloud.', 'error');
+    }
+    return false;
 }
 
 function saveGame() {
     try {
-        const saveData = {
-            ...gameState,
-            supplyIntervalId: null,
-            gameLoopRequestId: null, 
-            saveIntervalId: null,
-            eventIntervalId: null,
-            eventBadgeIntervalId: null,
-            salaryIntervalId: null,
-            priceUpdateIntervalId: null,
-            comboTimer: null
-        };
+        const saveData = getSaveDataForCloud(); 
         localStorage.setItem('wsdServiceSave', JSON.stringify(saveData));
+        if (CLOUD_SAVE_KEY && CLOUD_API_KEY) uploadSaveToCloud();
     } catch (e) {
         console.error('Save error:', e);
     }
 }
 
 function loadGame() {
-
     if (sessionStorage.getItem('isResetting') === 'true') {
         sessionStorage.removeItem('isResetting');
         return false;
     }
 
+    const storedSaveKey = localStorage.getItem('wsdServiceCloudKey');
+    const storedApiKey = localStorage.getItem('wsdServiceCloudApiKey');
+    if (storedSaveKey) CLOUD_SAVE_KEY = storedSaveKey;
+    if (storedApiKey) CLOUD_API_KEY = storedApiKey;
+    
     try {
         const saved = localStorage.getItem('wsdServiceSave');
         if (saved) {
@@ -317,15 +342,17 @@ function loadGame() {
                 combo: 0,
                 activeEvents: [],
                 rareOrdersCompleted: 0,
-                lastPartNotificationTime: {},
                 maxOrderLimit: GAME_CONFIG.maxOrders,
                 lastSalaryTime: Date.now(),
+                lastOrderTime: Date.now(),
                 partPrices: {...GAME_CONFIG.partCost},
                 totalSpent: 0,
                 totalEarned: 0,
                 totalOrdersFailed: 0,
                 failedOrderPenalty: 0,
-                supplyBoost: 0
+                supplyBoost: 0,
+                speedMultiplier: 1,
+                inventoryPressure: Object.fromEntries(Object.keys(GAME_CONFIG.partCost).map(key => [key, 0])) 
             }, loaded);
             
             if (!gameState.parts) gameState.parts = {...GAME_CONFIG.startParts};
@@ -342,10 +369,35 @@ function loadGame() {
     return false;
 }
 
+function setCloudKeys() {
+    const saveInput = document.getElementById('cloudSaveKeyInput');
+    const apiKeyInput = document.getElementById('cloudApiKeyInput');
+    
+    const newSaveKey = saveInput.value.trim();
+    const newApiKey = apiKeyInput.value.trim();
+
+    if (newSaveKey.length < 5) {
+        showNotification('Save ID must be at least 5 characters!', 'error');
+        return;
+    }
+    if (newApiKey.length < 10) {
+        showNotification('API Key seems too short. Check your service documentation!', 'warning');
+    }
+    
+    CLOUD_SAVE_KEY = newSaveKey;
+    CLOUD_API_KEY = newApiKey;
+    
+    localStorage.setItem('wsdServiceCloudKey', newSaveKey);
+    localStorage.setItem('wsdServiceCloudApiKey', newApiKey);
+    
+    showNotification('Cloud Keys set. Ready to sync!', 'success');
+    renderShop(); 
+}
+
 function calculateBasePartsCost(partsRequired) {
     let totalCost = 0;
     for (const [part, qty] of Object.entries(partsRequired)) {
-        totalCost += (gameState.partPrices[part] || GAME_CONFIG.partCost[part] || 0) * qty;
+        totalCost += (gameState.partPrices[part] || GAME_CONFIG.partCost[part]) * qty;
     }
     return totalCost;
 }
@@ -372,12 +424,11 @@ function createOrder() {
     
     const basePartsCost = calculateBasePartsCost(partsRequired);
     const baseTime = tpl.baseTime;
-    let baseReward = (basePartsCost * 1.6) + (baseTime * 2.2);
+    let baseReward = (basePartsCost * 1.2) + (baseTime * 1.4);
     let reward = baseReward * (0.8 + Math.random() * 0.4); 
     reward *= getPrestigeBonus(); 
     if (tpl.rare) reward *= 3; 
-    if (gameState.rewardMultiplier) reward *= gameState.rewardMultiplier;
-    
+    reward *= gameState.rewardMultiplier;
     reward = Math.round(reward);
 
     const order = {
@@ -396,19 +447,22 @@ function createOrder() {
     };
     
     gameState.orders.push(order);
-    renderOrders();
+    needsOrderRender = true;
+}
+
+function getOrderProgress(order) {
+    if (!order.initialTime || order.initialTime === 0) return 0;
+    return Math.max(0, Math.min(100, 100 - (order.timeRemaining / order.initialTime) * 100));
 }
 
 function renderEmployees() {
     const list = document.getElementById("employeeList");
     if (!list) return;
+    
     const existingCards = new Map();
     Array.from(list.children).forEach(card => {
-        if (card.dataset.empid) {
-            existingCards.set(card.dataset.empid, card);
-        } else {
-            card.remove();
-        }
+        if (card.dataset.empid) existingCards.set(card.dataset.empid, card);
+        else card.remove();
     });
 
     const fireBtnStyle = `position:absolute;top:5px;right:10px;font-size:1.5em;font-weight:bold;cursor:pointer;transition:transform 0.2s;line-height:1;padding:2px 5px;color:rgba(255,255,255,0.7);`;
@@ -435,6 +489,7 @@ function renderEmployees() {
             card = document.createElement("div");
             card.className = `employee-card`;
             card.dataset.empid = emp.id;
+            card.draggable = true; 
 
             const fireButtonHTML = emp.id !== 'emp-starter' ? 
                 `<div class="fire-employee-btn" data-empid="${emp.id}" style="${fireBtnStyle}" 
@@ -489,11 +544,8 @@ function renderEmployees() {
     } else if (!hasEmployees) {
         list.innerHTML = '<div style="text-align:center;padding:20px;opacity:0.6;">Hire in shop!</div>';
     }
-}
-
-function getOrderProgress(order) {
-    if (!order.initialTime || order.initialTime === 0) return 0;
-    return Math.max(0, Math.min(100, 100 - (order.timeRemaining / order.initialTime) * 100));
+    
+    needsEmployeeRender = false;
 }
 
 function renderOrders() {
@@ -502,6 +554,7 @@ function renderOrders() {
     
     if (gameState.orders.length === 0) {
         list.innerHTML = '<div style="text-align:center;padding:20px;opacity:0.6;grid-column:1/-1;">Awaiting orders...</div>';
+        needsOrderRender = false;
         return;
     }
     
@@ -509,11 +562,8 @@ function renderOrders() {
     const existingCards = new Map();
     
     Array.from(list.children).forEach(card => {
-        if (card.dataset.orderId) {
-            existingCards.set(Number(card.dataset.orderId), card);
-        } else {
-            card.remove();
-        }
+        if (card.dataset.orderId) existingCards.set(Number(card.dataset.orderId), card);
+        else card.remove();
     });
     
     gameState.orders.forEach(order => {
@@ -559,9 +609,10 @@ function renderOrders() {
         
         const progress = getOrderProgress(order);
         const timeRemainingText = Math.ceil(order.timeRemaining / 10) + 's';
-        const timeProgress = Math.min(100, (Math.min(order.timeRemaining, order.maxTime) / order.maxTime) * 100);
-        const timeColor = timeProgress > 50 ? '#10b981' : timeProgress > 25 ? '#f59e0b' : '#ef4444';
-
+        
+        const timeProgress = Math.min(100, (order.timeRemaining / order.maxTime) * 100); 
+        const timeColor = timeProgress > 50 ? '#10b981' : timeProgress > 25 ? '#f59e0b' : '#ef4444'; 
+        
         const fill = card.querySelector('[data-stat="progress-fill"]');
         if (fill) fill.style.width = `${progress}%`;
         
@@ -570,92 +621,67 @@ function renderOrders() {
             timeSpan.textContent = timeRemainingText;
             timeSpan.style.color = timeColor;
         }
-
+        
         const statusDiv = card.querySelector('[data-stat="status"]');
         if (statusDiv) {
             if (assignedEmployee) {
-                statusDiv.innerHTML = `🛠 ${assignedEmployee.avatar} work`;
+                statusDiv.innerHTML = `🛠 ${assignedEmployee.avatar} ${assignedEmployee.name}`;
             } else {
-                statusDiv.innerHTML = `<button class="auto-assign-btn" onclick="autoAssignOrder(${order.id})">🤖 Auto</button>`;
+                statusDiv.innerHTML = `Waiting for assignment...`; 
             }
         }
     });
-
-    existingCards.forEach(card => card.remove());
-
-    if (list.children.length === 0 || existingCards.size > 0 || fragment.children.length > 0) {
-        list.replaceChildren(...Array.from(list.children).filter(c => c.dataset.orderId).concat(Array.from(fragment.children)));
-    }
-}
-
-function autoAssignOrder(orderId) {
-    const order = gameState.orders.find(o => o.id === Number(orderId));
-    if (!order || order.employeeId) return;
-
-    const bestEmployee = findBestEmployeeForOrder(order);
-    if (bestEmployee) {
-        assignEmployeeToOrder(bestEmployee.id, order.id);
-        showNotification(`${bestEmployee.name} → ${order.type}`, 'info');
-    } else {
-        showNotification('No employee', 'error');
-    }
+    
+    list.replaceChildren(...Array.from(fragment.children), ...Array.from(existingCards.values()).filter(c => c.dataset.orderId));
+    
+    needsOrderRender = false;
 }
 
 function assignEmployeeToOrder(empId, orderId) {
     const emp = gameState.employees.find(e => e.id === empId);
     const order = gameState.orders.find(o => o.id === orderId);
 
-    if (!emp || !order) return;
-    if (emp.isBusy) {
-        showNotification('Busy!', 'error');
+    if (!emp || !order || emp.isBusy) {
+        if (emp.isBusy) showNotification(`${emp.name} is busy!`, 'error');
         return;
     }
-    if (order.employeeId) {
-        showNotification('Already taken!', 'error');
-        return;
-    }
-
+    
     for (const [part, qty] of Object.entries(order.partsRequired)) {
         if ((gameState.parts[part] || 0) < qty) {
-            const currentTime = Date.now();
-            const lastTime = gameState.lastPartNotificationTime[part] || 0;
-            if (currentTime - lastTime > 60000) {
-                showNotification(`Need: ${PART_ICONS[part]}`, 'error');
-                gameState.lastPartNotificationTime[part] = currentTime;
-            }
+            showNotification(`Need ${PART_ICONS[part]} x${qty}!`, 'error');
             return;
         }
     }
 
+    const saveChance = (emp.perks.savePartChance || 0);
+    const breakChance = (emp.perks.breakPartChance || 0) + GAME_CONFIG.failurePenalty; // Added base failure chance
+    
     for (const [part, qty] of Object.entries(order.partsRequired)) {
         let actualQty = qty;
-
-        const saveChance = emp.perks.savePartChance || 0;
-        const breakChance = emp.perks.breakPartChance || 0;
-
-        if (saveChance && Math.random() < saveChance) {
-            actualQty = Math.max(0, Math.ceil(qty * 0.4));
-            createParticle('✨', 300, 300);
-            showNotification('Parts saved!', 'info');
-        } else if (breakChance && Math.random() < breakChance) {
-            actualQty = Math.ceil(qty * 2.5);
+        
+        if (Math.random() < saveChance) {
+            actualQty = 0;
+            createParticle('🔧', 520, 320);
+            showNotification(`Saved ${PART_ICONS[part]} x${qty}!`, 'success');
+        } else if (Math.random() < breakChance) {
+            actualQty = Math.ceil(qty * 2.5); 
             createParticle('💥', 300, 300);
             showNotification('Parts broken!', 'warning');
         }
-
+        
         gameState.parts[part] = Math.max(0, (gameState.parts[part] || 0) - actualQty);
     }
-
+    
     emp.isBusy = true;
     order.employeeId = emp.id;
     order.timeRemaining = order.initialTime;
 
     if (emp.role === 'courier') {
-        order.timeRemaining = Math.max(10, Math.floor(order.timeRemaining * 0.65));
+        order.timeRemaining = Math.max(10, Math.floor(order.timeRemaining * 0.65)); // 35% time reduction
         order.reward = Math.round(order.reward * (1 + (emp.perks.bonusReward || 0)));
         createParticle('🚚', 540, 360);
-    }
-
+    } 
+    
     createParticle('🔧', 500, 400);
     renderEmployees();
     renderOrders();
@@ -664,21 +690,21 @@ function assignEmployeeToOrder(empId, orderId) {
 
 function updateUI() {
     const moneyEl = document.getElementById('money');
-    if (moneyEl) moneyEl.textContent = Math.floor(gameState.money);
-    
+    if (moneyEl) moneyEl.textContent = Math.floor(gameState.money).toLocaleString('en-US'); // Use en-US for code output consistency
+
     const partsEl = document.getElementById('parts');
     if (partsEl) partsEl.textContent = Object.entries(gameState.parts)
         .map(([key, val]) => `${PART_ICONS[key]}${val}`).join(' ');
-    
+
     const completedEl = document.getElementById('completed');
     if (completedEl) completedEl.textContent = gameState.totalOrdersCompleted;
-    
+
     const comboEl = document.getElementById('combo');
     if (comboEl) comboEl.textContent = gameState.combo + 'x';
     
     const prestigeEl = document.getElementById('prestige');
     if (prestigeEl) prestigeEl.textContent = gameState.prestige;
-    
+
     const nextSalaryEl = document.getElementById('next-salary');
     if (nextSalaryEl) {
         const nextSalary = Math.max(0, Math.floor((GAME_CONFIG.salaryInterval - (Date.now() - gameState.lastSalaryTime)) / 1000));
@@ -689,63 +715,73 @@ function updateUI() {
     }
 }
 
+function buyPart(part) {
+    const cost = gameState.partPrices[part];
+    const qty = 1;
+    
+    if (gameState.money < cost) {
+        showNotification('Not enough money!', 'error');
+        return;
+    }
+    
+    gameState.money -= cost;
+    gameState.totalSpent += cost;
+    gameState.parts[part] = (gameState.parts[part] || 0) + qty;
+    
+    gameState.inventoryPressure[part] = Math.min(200, (gameState.inventoryPressure[part] || 0) + 1 * qty);
+    
+    updateUI();
+    renderShop();
+    showNotification(`Bought: ${PART_ICONS[part]} x${qty}`, 'success');
+}
+
 function renderShop() {
     const content = document.getElementById('shopContent');
     if (!content) return;
     content.innerHTML = '';
-
+    
     if (gameState.currentShopTab === 'parts') {
-        const grid = document.createElement('div');
-        grid.className = 'shop-grid';
-        
+        content.innerHTML = '<div class="shop-content-grid"></div>';
+        const grid = content.querySelector('.shop-content-grid');
         Object.keys(GAME_CONFIG.partCost).forEach(part => {
-            const unitPrice = gameState.partPrices[part] || GAME_CONFIG.partCost[part];
-            const stock = gameState.parts[part] || 0;
-            
-            [1, 5, 10].forEach(amount => {
-                const cost = Math.floor(unitPrice * amount);
-                const card = document.createElement('div');
-                card.className = 'shop-card shop-part';
-                card.innerHTML = `
-                    <div class="shop-hero">${PART_ICONS[part]}</div>
-                    <div class="shop-body">
-                        <div class="shop-title">${part} x${amount}</div>
-                        <div class="shop-desc">Stock: ${stock} | Unit: 💰${unitPrice}</div>
-                    </div>
-                    <div class="shop-actions">
-                        <div class="shop-price">💰 ${cost}</div>
-                        <button ${gameState.money < cost ? 'disabled' : ''}>Buy</button>
-                    </div>
-                `;
-                const btn = card.querySelector('button');
-                btn.onclick = () => buyPart(part, amount, cost);
-                grid.appendChild(card);
-            });
+            const price = gameState.partPrices[part];
+            const hasEnoughMoney = gameState.money >= price;
+            const card = document.createElement('div');
+            card.className = 'shop-item';
+            card.innerHTML = `
+                <div class="shop-item-info">
+                    <div class="shop-item-name">${PART_ICONS[part]} ${part.charAt(0).toUpperCase() + part.slice(1)}</div>
+                    <div class="shop-item-desc">Current inventory: ${gameState.parts[part] || 0}</div>
+                </div>
+                <div class="shop-actions">
+                    <div class="shop-price">💰 ${price}</div>
+                    <button data-part="${part}" ${hasEnoughMoney ? '' : 'disabled'}>Buy 1</button>
+                </div>
+            `;
+            const btn = card.querySelector('button');
+            btn.onclick = () => buyPart(part, 1);
+            grid.appendChild(card);
         });
         content.appendChild(grid);
-    }
+    } 
     else if (gameState.currentShopTab === 'employees') {
-        const grid = document.createElement('div');
-        grid.className = 'shop-grid';
+        content.innerHTML = '<div class="shop-content-grid"></div>';
+        const grid = content.querySelector('.shop-content-grid');
         PROFESSIONS.forEach(p => {
-            const baseCost = 600;
-            const scalingFactor = Math.pow(1.35, gameState.employees.length);
-            const cost = Math.floor(baseCost * (p.costMultiplier || 1) * scalingFactor);
-            const salary = Math.floor(GAME_CONFIG.baseSalary * (p.salaryMultiplier || 1));
+            const cost = Math.floor(1000 + 500 * (gameState.employees.length + 1) * p.costMultiplier);
+            const perksList = Object.entries(p.perks).map(([key, val]) => {
+                if (val === 0) return '';
+                const sign = key !== 'breakPartChance' ? '+' : ''; 
+                return `• ${PERK_TOOLTIPS[key]}: ${key === 'breakPartChance' ? val * 100 : sign + Math.round(val * 100)}%`; 
+            }).filter(Boolean).join('<br>');
+
             const card = document.createElement('div');
-            card.className = 'shop-card shop-employee';
+            card.className = 'shop-item';
             card.innerHTML = `
-                <div class="shop-hero">👤</div>
-                <div class="shop-body">
-                    <div class="shop-title">${p.name}</div>
-                    <div class="shop-desc">${p.desc}</div>
-                    <div class="shop-desc" style="font-size:0.8em;margin-top:3px;">💼 Salary: 💰${salary}/3h</div>
-                    <div class="shop-perks" style="font-size:0.75em;margin-top:4px;">${
-                        Object.entries(p.perks || {}).map(([k,v]) => {
-                            const sign = v >= 0 ? '+' : '';
-                            return `${k.replace('Bonus','').replace('Chance','')}: ${sign}${Math.round(v*100)}%`;
-                        }).join(' • ')
-                    }</div>
+                <div class="shop-item-info">
+                    <div class="shop-item-name">${ROLE_ICONS[p.id]} ${p.name}</div>
+                    <div class="shop-item-desc">${p.desc}</div>
+                    <div class="shop-item-desc perks-list">${perksList.split('•').join('• ')}</div>
                 </div>
                 <div class="shop-actions">
                     <div class="shop-price">💰 ${cost}</div>
@@ -757,126 +793,229 @@ function renderShop() {
             grid.appendChild(card);
         });
         content.appendChild(grid);
-    }
+    } 
     else if (gameState.currentShopTab === 'upgrades') {
+        content.innerHTML = '<div class="shop-content-grid"></div>';
+        const grid = content.querySelector('.shop-content-grid');
+        const currentSupplyInterval = getSupplyInterval();
         const upgrades = [
-            { 
-                name: '⚡ Speed Boost All', 
-                cost: GAME_CONFIG.upgradeCost, 
-                action: upgradeEmployees,
-                desc: `+${GAME_CONFIG.employeeSpeedIncrease} speed each`,
-                disabled: gameState.employees.length === 0
-            },
-            { 
-                name: '📦 Auto Supply', 
-                cost: GAME_CONFIG.supplyUpgradeCost, 
-                action: buySupply, 
-                disabled: gameState.supplyActive,
-                desc: 'Parts delivery every 40s'
-            },
-            { 
-                name: '📋 More Orders', 
-                cost: GAME_CONFIG.orderIncreaseCost, 
-                action: expandOrders,
-                desc: `+2 slots (now: ${gameState.maxOrderLimit})`
-            },
-            { 
-                name: '🤖 Automation', 
-                cost: 10000, 
-                action: buyAutomation,
-                desc: 'Employee auto-takes orders',
-                disabled: !gameState.employees.find(e => !e.autoWork)
-            },
-            { 
-                name: '👑 PRESTIGE', 
-                cost: GAME_CONFIG.prestigeCost, 
-                action: doPrestige,
-                desc: `Reset for +20% bonus (now: ${gameState.prestige}x)`
-            },
-            { 
-                name: '🔄 RESET', 
-                cost: 0, 
-                action: resetGame,
-                desc: 'Full game reset'
-            }
+            { name: '⚡ Speed Boost All', cost: GAME_CONFIG.upgradeCost, action: upgradeEmployees, desc: `+${GAME_CONFIG.employeeSpeedIncrease} speed each`, disabled: gameState.employees.length === 0 },
+            { name: '📦 Auto Supply', cost: GAME_CONFIG.supplyUpgradeCost, action: buySupply, disabled: gameState.supplyActive, desc: `Parts auto-supply every ${Math.round(currentSupplyInterval/1000)}s` },
+            { name: '📋 Max Orders', cost: GAME_CONFIG.orderIncreaseCost, action: expandOrders, desc: `Increase max order limit by 2. Current: ${gameState.maxOrderLimit}` },
+            { name: '🤖 Employee Automation', cost: 10000, action: buyAutomation, desc: 'Randomly automates one non-automated employee (auto-assigns best order)', disabled: !gameState.employees.some(e => !e.autoWork) }
         ];
-        
+
+        const cloudControls = document.createElement('div');
+        cloudControls.className = 'shop-item cloud-item full-width';
+        cloudControls.style = 'grid-column: 1 / -1; background: rgba(255,255,255,0.05); padding: 10px; border-radius: 8px; margin-bottom: 20px; border: 2px solid rgba(255, 255, 255, 0.1);';
+        cloudControls.innerHTML = `
+            <div class="shop-item-name" style="margin-bottom: 5px;">☁️ Cloud Sync Setup</div>
+            <div style="font-size: 0.8em; opacity: 0.8; margin-bottom: 10px;">
+                Enter your unique Save ID and the API Key from your cloud service (e.g., jsonstorage.net).
+            </div>
+            
+            <label for="cloudSaveKeyInput" style="display: block; margin-top: 5px; font-weight: bold;">Save ID (Unique Key):</label>
+            <input type="text" id="cloudSaveKeyInput" placeholder="Your unique save ID" value="${CLOUD_SAVE_KEY || ''}" 
+                   style="width: 100%; padding: 8px; margin-bottom: 8px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff;">
+                   
+            <label for="cloudApiKeyInput" style="display: block; margin-top: 5px; font-weight: bold;">API Key:</label>
+            <input type="password" id="cloudApiKeyInput" placeholder="API Key for writing data" value="${CLOUD_API_KEY || ''}" 
+                   style="width: 100%; padding: 8px; margin-bottom: 10px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff;">
+
+            <button onclick="setCloudKeys()" style="margin-right: 5px; padding: 10px; background: #3b82f6;">SET KEYS</button>
+            <button onclick="downloadSaveFromCloud()" style="margin-right: 5px; padding: 10px; background: #f97316;">⬇️ LOAD</button>
+            <button onclick="uploadSaveToCloud()" style="padding: 10px; background: #4ade80;">⬆️ SAVE</button>
+            
+            <div style="margin-top: 10px; font-size: 0.9em; opacity: 0.7;">
+                Status: Key: ${CLOUD_SAVE_KEY ? '✅' : '❌'}, API: ${CLOUD_API_KEY ? '✅' : '❌'}
+            </div>
+        `;
+        grid.appendChild(cloudControls);
+
         upgrades.forEach(upg => {
-            const item = document.createElement('div');
-            item.className = 'shop-item';
-            const canAfford = upg.cost === 0 || gameState.money >= upg.cost;
-            const isDisabled = upg.disabled || !canAfford;
-            item.innerHTML = `
+            const card = document.createElement('div');
+            card.className = 'shop-item';
+            card.innerHTML = `
                 <div class="shop-item-info">
                     <div class="shop-item-name">${upg.name}</div>
                     <div class="shop-item-desc">${upg.desc}</div>
-                    ${upg.cost > 0 ? `<div class="shop-item-desc">💰 ${upg.cost}</div>` : ''}
                 </div>
-                <button ${isDisabled ? 'disabled' : ''}>${upg.cost > 0 ? 'Buy' : 'Reset'}</button>
-            `;
-            const btn = item.querySelector('button');
-            btn.onclick = upg.action;
-            content.appendChild(item);
-        });
-    }
-    else if (gameState.currentShopTab === 'achievements') {
-        ACHIEVEMENTS.forEach(ach => {
-            const unlocked = gameState.achievements.includes(ach.id);
-            const item = document.createElement('div');
-            item.className = `achievement-item ${unlocked ? 'unlocked' : ''}`;
-            item.innerHTML = `
-                <div class="achievement-icon">${unlocked ? ach.icon : '🔒'}</div>
-                <div class="achievement-info">
-                    <div class="achievement-name">${ach.name}</div>
-                    <div class="achievement-desc">${ach.desc}</div>
-                    <div class="achievement-reward">💰 ${ach.reward}</div>
+                <div class="shop-actions">
+                    <div class="shop-price">💰 ${upg.cost.toLocaleString('en-US')}</div>
+                    <button ${gameState.money < upg.cost || upg.disabled ? 'disabled' : ''}>Buy</button>
                 </div>
             `;
-            content.appendChild(item);
+            const btn = card.querySelector('button');
+            if (!upg.disabled) btn.onclick = upg.action;
+            grid.appendChild(card);
         });
-    }
+
+        const prestigeCard = document.createElement('div');
+        prestigeCard.className = 'shop-item prestige-item';
+        const prestigeCost = GAME_CONFIG.prestigeCost * (1 + gameState.prestige * 0.5);
+        prestigeCard.innerHTML = `
+            <div class="shop-item-info">
+                <div class="shop-item-name">🏆 Prestige (Lvl ${gameState.prestige + 1})</div>
+                <div class="shop-item-desc">Reset progress for a permanent +20% order reward bonus (Current: +${gameState.prestige * 20}%)</div>
+            </div>
+            <div class="shop-actions">
+                <div class="shop-price prestige-price">💰 ${prestigeCost.toLocaleString('en-US')}</div>
+                <button onclick="doPrestige()" ${gameState.money < prestigeCost ? 'disabled' : ''}>PRESTIGE!</button>
+            </div>
+        `;
+        grid.appendChild(prestigeCard);
+
+        const resetCard = document.createElement('div');
+        resetCard.className = 'shop-item prestige-item';
+        resetCard.style = 'background: #550000; border-color: #ff0000;';
+        resetCard.innerHTML = `
+            <div class="shop-item-info">
+                <div class="shop-item-name">💀 Reset Game</div>
+                <div class="shop-item-desc">WARNING: Resets ALL progress, including Prestige.</div>
+            </div>
+            <div class="shop-actions">
+                <button onclick="resetGame()" style="background: #ff0000; color: white; padding: 10px;">FULL RESET</button>
+            </div>
+        `;
+        grid.appendChild(resetCard);
+        
+    }   else if (gameState.currentShopTab === 'achievements') {
+        renderAchievements();
+    }   
+} 
+function renderAchievements() {
+    const content = document.getElementById('shopContent');
+    if (!content) return;
+    content.innerHTML = '<div class="achievements-grid"></div>';
+    const grid = content.querySelector('.achievements-grid');
+
+    ACHIEVEMENTS.forEach(ach => {
+        const isUnlocked = gameState.achievements.includes(ach.id);
+        const card = document.createElement('div');
+        card.className = `achievement-item ${isUnlocked ? 'unlocked' : 'locked'}`;
+
+        let statusText = '';
+        let progressValue = 0;
+        let targetValue = 0;
+        let canClaim = false;
+
+        if (ach.id.includes('orders')) {
+            progressValue = gameState.totalOrdersCompleted;
+            targetValue = ACHIEVEMENTS.find(a => a.id === ach.id).check.toString().match(/>= (\d+)/);
+            targetValue = targetValue ? parseInt(targetValue[1]) : 1;
+        } else if (ach.id === 'rich') {
+            progressValue = gameState.money;
+            targetValue = ACHIEVEMENTS.find(a => a.id === ach.id).check.toString().match(/>= (\d+)/);
+            targetValue = targetValue ? parseInt(targetValue[1]) : 100000;
+        } else if (ach.id === 'team') {
+            progressValue = gameState.employees.length;
+            targetValue = ACHIEVEMENTS.find(a => a.id === ach.id).check.toString().match(/>= (\d+)/);
+            targetValue = targetValue ? parseInt(targetValue[1]) : 5;
+        } else if (ach.id === 'combo_master') {
+             progressValue = gameState.combo;
+             targetValue = 10;
+        } else if (ach.id === 'survivor') {
+             progressValue = gameState.totalOrdersFailed;
+             targetValue = 10;
+        } else if (ach.id === 'profitable') {
+             progressValue = gameState.totalEarned - gameState.totalSpent;
+             targetValue = 50000;
+        } else if (ach.id === 'rare_order') {
+             progressValue = gameState.rareOrdersCompleted;
+             targetValue = 1;
+        }
+
+        if (isUnlocked) {
+            statusText = `<div class="achievement-status unlocked-status">✅ Claimed!</div>`;
+        } else if (ach.check(gameState)) {
+            canClaim = true;
+            statusText = `<div class="achievement-status can-claim">🎉 Ready to Claim!</div>`;
+            card.classList.add('can-claim-border');
+        } else {
+            if (targetValue > 1) { 
+                 const progressPercent = targetValue > 0 ? Math.min(100, Math.floor((progressValue / targetValue) * 100)) : 0;
+                 statusText = `
+                    <div class="achievement-progress">
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: ${progressPercent}%;"></div>
+                        </div>
+                        <div class="progress-text">${Math.min(progressValue, targetValue).toLocaleString('en-US')}/${targetValue.toLocaleString('en-US')}</div>
+                    </div>
+                 `;
+            } else {
+                statusText = `<div class="achievement-status locked-status">Locked...</div>`;
+            }
+        }
+        
+        card.innerHTML = `
+            <div class="achievement-icon">${ach.icon}</div>
+            <div class="achievement-info">
+                <div class="achievement-name">${ach.name}</div>
+                <div class="achievement-desc">${ach.desc}</div>
+                ${statusText}
+            </div>
+            <div class="achievement-reward">
+                ${isUnlocked ? `<span>💰 ${ach.reward.toLocaleString('en-US')}</span>` : ''}
+                ${canClaim ? `<button data-achid="${ach.id}" onclick="claimAchievement('${ach.id}')">CLAIM 💰 ${ach.reward.toLocaleString('en-US')}</button>` : ''}
+            </div>
+        `;
+
+        grid.appendChild(card);
+    });
 }
 
-function buyPart(part, amount, cost) {
-    if (gameState.money >= cost) {
-        gameState.money -= cost;
-        gameState.totalSpent += cost;
-        gameState.parts[part] = (gameState.parts[part] || 0) + amount;
+function claimAchievement(achId) {
+    const ach = ACHIEVEMENTS.find(a => a.id === achId);
+    if (!ach) return;
+    
+    if (gameState.achievements.includes(achId)) {
+        showNotification('Achievement already claimed!', 'warning');
+        return;
+    }
+    
+    if (ach.check(gameState)) {
+        gameState.money += ach.reward;
+        gameState.totalEarned += ach.reward;
+        gameState.achievements.push(achId);
+        showNotification(`Achievement unlocked: ${ach.icon} ${ach.name} (+💰 ${ach.reward.toLocaleString('en-US')})`, 'success');
+        createParticle('💰', window.innerWidth / 2, window.innerHeight / 2);
         updateUI();
         renderShop();
-        showNotification(`Bought: ${PART_ICONS[part]} x${amount}`, 'success');
-        createParticle(PART_ICONS[part], 800, 300);
+    } else {
+        showNotification('Achievement not yet completed!', 'error');
     }
 }
 
-function hireEmployee(professionId = null) {
-    const prof = PROFESSIONS.find(p => p.id === professionId) || PROFESSIONS[0];
-    const baseCost = 600;
-    const scalingFactor = Math.pow(1.35, gameState.employees.length);
-    const cost = Math.floor(baseCost * (prof.costMultiplier || 1) * scalingFactor);
+
+function hireEmployee(professionId) {
+    const prof = PROFESSIONS.find(p => p.id === professionId);
+    if (!prof) return;
+    
+    const baseCost = 600 + prof.costMultiplier * 1000;
+    const cost = Math.round(baseCost * (1 + gameState.employees.length * 0.2));
 
     if (gameState.money < cost) {
         showNotification('Not enough money!', 'error');
         return;
     }
-
+    
     gameState.money -= cost;
     gameState.totalSpent += cost;
-
+    
+    const names = ['Alice', 'Bob', 'Charlie', 'Dana', 'Ethan', 'Fiona', 'George', 'Hannah', 'Isaac', 'Jenna', 'Kate', 'Max', 'Sophia'];
     const avatar = GAME_CONFIG.EMPLOYEE_AVATARS[Math.floor(Math.random() * GAME_CONFIG.EMPLOYEE_AVATARS.length)];
-    const names = ['Alex', 'Maria', 'Ivan', 'Anna', 'Peter', 'Helen', 'Dmitry', 'Olga', 'Boris', 'Kate', 'Max', 'Sophia'];
     const name = names[Math.floor(Math.random() * names.length)];
-
-    const perks = {
-        speedBonus: Math.random() < 0.35 ? (0.02 + Math.random() * 0.10) : 0,
-        savePartChance: Math.random() < 0.20 ? (0.03 + Math.random() * 0.12) : 0,
-        breakPartChance: Math.random() < 0.10 ? (0.02 + Math.random() * 0.08) : 0,
-        bonusReward: Math.random() < 0.15 ? (0.02 + Math.random() * 0.15) : 0,
-        expBoost: Math.random() < 0.12 ? (0.02 + Math.random() * 0.18) : 0
+    
+    const perks = { 
+        speedBonus: Math.random() < 0.35 ? (0.02 + Math.random() * 0.10) : 0, 
+        savePartChance: Math.random() < 0.20 ? (0.03 + Math.random() * 0.12) : 0, 
+        breakPartChance: Math.random() < 0.10 ? (0.02 + Math.random() * 0.08) : 0, 
+        bonusReward: Math.random() < 0.15 ? (0.02 + Math.random() * 0.15) : 0, 
+        expBoost: Math.random() < 0.12 ? (0.02 + Math.random() * 0.18) : 0 
     };
-
+    
     Object.assign(perks, prof.perks || {});
-
+    
     const employee = {
         id: `emp-${Date.now()}-${Math.random()}`,
         avatar,
@@ -890,13 +1029,14 @@ function hireEmployee(professionId = null) {
         perks,
         salaryMultiplier: prof.salaryMultiplier || 1
     };
-
+    
     gameState.employees.push(employee);
-
+    
     if (employee.role === 'warehouse') {
         gameState.supplyBoost = (gameState.supplyBoost || 0) + 1;
+        if (gameState.supplyActive) initIntervals(); 
     }
-
+    
     renderEmployees();
     updateUI();
     renderShop();
@@ -907,17 +1047,17 @@ function hireEmployee(professionId = null) {
 function fireEmployee(empId) {
     const emp = gameState.employees.find(e => e.id === empId);
     if (!emp) return;
-    
+
     if (emp.isBusy) {
         showNotification('Employee is busy!', 'error');
         return;
     }
-
+    
     if (emp.id === 'emp-starter') {
         showNotification('Cannot fire starter!', 'error');
         return;
     }
-
+    
     const severance = Math.floor(GAME_CONFIG.baseSalary * (emp.salaryMultiplier || 1) * 3);
     
     if (!confirm(`Fire ${emp.name}?\nSeverance: ${severance} 💰`)) {
@@ -928,75 +1068,66 @@ function fireEmployee(empId) {
         showNotification('Cannot afford severance!', 'error');
         return;
     }
-    
+
     gameState.money -= severance;
     gameState.totalSpent += severance;
-
+    
     if (emp.role === 'warehouse') {
         gameState.supplyBoost = Math.max(0, (gameState.supplyBoost || 0) - 1);
+        if (gameState.supplyActive) initIntervals(); 
     }
-
+    
     gameState.employees = gameState.employees.filter(e => e.id !== empId);
     
-    showNotification(`${emp.name} fired (-${severance} 💰)`, 'info');
-    
-    renderEmployees(); 
+    renderEmployees();
     updateUI();
     renderShop();
+    showNotification(`Fired: ${emp.name}`, 'warning');
 }
+
 
 function upgradeEmployees() {
     const cost = GAME_CONFIG.upgradeCost;
+    if (gameState.employees.length === 0) {
+        showNotification('No employees to upgrade!', 'error');
+        return;
+    }
     if (gameState.money < cost) {
         showNotification('Not enough money!', 'error');
         return;
     }
-    
-    if (gameState.employees.length === 0) {
-        showNotification('No employees!', 'error');
-        return;
-    }
-    
     gameState.money -= cost;
     gameState.totalSpent += cost;
-    gameState.employees.forEach(e => {
-        e.speed = Math.min(GAME_CONFIG.employeeMaxSpeed, e.speed + GAME_CONFIG.employeeSpeedIncrease);
+    let upgradedCount = 0;
+    gameState.employees.forEach(emp => {
+        if (emp.speed < GAME_CONFIG.employeeMaxSpeed) {
+            emp.speed = Math.min(GAME_CONFIG.employeeMaxSpeed, emp.speed + GAME_CONFIG.employeeSpeedIncrease);
+            upgradedCount++;
+        }
     });
-    
-    showNotification('All upgraded!', 'success');
-    renderEmployees(); 
+    showNotification(`Upgraded ${upgradedCount} employee(s)!`, 'success');
+    renderEmployees();
     updateUI();
-    renderShop();
+}
+
+function getSupplyInterval() {
+    const boostFactor = 1 - (gameState.supplyBoost * 0.10); 
+    const minInterval = 10000; 
+    return Math.max(minInterval, GAME_CONFIG.baseSupplyInterval * boostFactor);
 }
 
 function buySupply() {
     const cost = GAME_CONFIG.supplyUpgradeCost;
+    if (gameState.supplyActive) return;
     if (gameState.money < cost) {
         showNotification('Not enough money!', 'error');
         return;
     }
-    if (gameState.supplyActive) {
-        showNotification('Already active!', 'warning');
-        return;
-    }
-    
     gameState.money -= cost;
     gameState.totalSpent += cost;
     gameState.supplyActive = true;
-    
-    if (gameState.supplyIntervalId) clearInterval(gameState.supplyIntervalId);
-    gameState.supplyIntervalId = setInterval(() => {
-        if (gameState.supplyActive) {
-            for (const part in GAME_CONFIG.supplyAmount) {
-                const boost = (gameState.supplyBoost || 0);
-                gameState.parts[part] = (gameState.parts[part] || 0) + GAME_CONFIG.supplyAmount[part] + boost;
-            }
-            showNotification('📦 Supply arrived!', 'success');
-            updateUI();
-        }
-    }, GAME_CONFIG.supplyInterval);
-    
-    showNotification('Auto supply active!', 'success');
+    initIntervals();
+    showNotification(`Auto supply activated! (${Math.round(getSupplyInterval()/1000)}s)`, 'success');
     updateUI();
     renderShop();
 }
@@ -1007,11 +1138,9 @@ function expandOrders() {
         showNotification('Not enough money!', 'error');
         return;
     }
-    
     gameState.money -= cost;
     gameState.totalSpent += cost;
     gameState.maxOrderLimit += 2;
-    
     showNotification('Order limit +2!', 'success');
     updateUI();
     renderShop();
@@ -1023,17 +1152,14 @@ function buyAutomation() {
         showNotification('Not enough money!', 'error');
         return;
     }
-    
     const emp = gameState.employees.find(e => !e.autoWork);
     if (!emp) {
         showNotification('All automated!', 'warning');
         return;
     }
-    
     gameState.money -= cost;
     gameState.totalSpent += cost;
     emp.autoWork = true;
-    
     showNotification(`${emp.name} automated!`, 'success');
     updateUI();
     renderShop();
@@ -1044,17 +1170,13 @@ function doPrestige() {
         showNotification('Not enough money!', 'error');
         return;
     }
-    
     const newBonus = (gameState.prestige + 1) * 20;
     if (!confirm(`PRESTIGE?\n\nReset all progress for permanent +20% bonus!\n\nCurrent bonus: +${gameState.prestige * 20}%\nNew bonus: +${newBonus}%`)) {
         return;
     }
-    
     clearAllIntervals();
-    
     gameState.prestige++;
     const keepAchievements = [...gameState.achievements];
-    
     Object.assign(gameState, {
         money: GAME_CONFIG.startMoney,
         parts: {...GAME_CONFIG.startParts},
@@ -1070,32 +1192,27 @@ function doPrestige() {
         totalEarned: 0,
         lastSalaryTime: Date.now(),
         achievements: keepAchievements,
-        supplyBoost: 0
+        supplyBoost: 0,
+        inventoryPressure: Object.fromEntries(Object.keys(GAME_CONFIG.partCost).map(key => [key, 0])) // Reset pressure on Prestige
     });
-    
     showNotification(`🎉 Prestige ${gameState.prestige}! +${newBonus}% bonus`, 'success');
     renderEmployees();
     renderOrders();
     renderShop();
     updateUI();
-    initIntervals(); 
-    
+    initIntervals();
     const banner = document.getElementById('eventsBanner');
     if (banner) banner.innerHTML = '';
-    
     saveGame();
 }
 
-function resetGame() {
+function resetGame() { 
     if (!confirm('Are you sure you want to fully reset the game? All progress will be lost!')) {
         return;
     }
     clearAllIntervals();
-    
     sessionStorage.setItem('isResetting', 'true');
-    
     localStorage.removeItem('wsdServiceSave');
-    
     window.location.reload(); 
 }
 
@@ -1109,18 +1226,47 @@ window.addEventListener('beforeunload', () => {
 
 function clearAllIntervals() {
     if (gameState.supplyIntervalId) clearInterval(gameState.supplyIntervalId);
-    if (gameState.gameLoopRequestId) cancelAnimationFrame(gameState.gameLoopRequestId);
     if (gameState.saveIntervalId) clearInterval(gameState.saveIntervalId);
     if (gameState.eventIntervalId) clearInterval(gameState.eventIntervalId);
     if (gameState.eventBadgeIntervalId) clearInterval(gameState.eventBadgeIntervalId);
     if (gameState.salaryIntervalId) clearInterval(gameState.salaryIntervalId);
     if (gameState.priceUpdateIntervalId) clearInterval(gameState.priceUpdateIntervalId);
     if (gameState.comboTimer) clearTimeout(gameState.comboTimer);
+    if (gameState.gameLoopRequestId) cancelAnimationFrame(gameState.gameLoopRequestId);
 }
 
-function paySalaries() {
-    if (gameState.employees.length === 0) return;
-    
+function initIntervals() {
+    clearAllIntervals(); 
+
+    gameState.gameLoopRequestId = requestAnimationFrame(gameTick); 
+    gameState.saveIntervalId = setInterval(saveGame, 10000); 
+    gameState.eventIntervalId = setInterval(triggerRandomEvent, 60000);
+    gameState.eventBadgeIntervalId = setInterval(renderEventBadges, 1000); 
+    gameState.salaryIntervalId = setInterval(paySalary, GAME_CONFIG.salaryInterval);
+    gameState.priceUpdateIntervalId = setInterval(updatePartPrices, 15000); 
+    if (gameState.supplyActive) {
+        gameState.supplyIntervalId = setInterval(doSupply, getSupplyInterval());
+    }
+}
+
+function doSupply() {
+    const totalParts = Object.values(gameState.parts).reduce((a, b) => a + b, 0);
+    if (totalParts > 200) {
+        showNotification('Warehouse full!', 'warning');
+        return;
+    }
+    let partsAdded = 0;
+    Object.entries(GAME_CONFIG.supplyAmount).forEach(([part, amount]) => {
+        gameState.parts[part] = (gameState.parts[part] || 0) + amount;
+        partsAdded += amount;
+        gameState.inventoryPressure[part] = Math.max(0, (gameState.inventoryPressure[part] || 0) - 0.5 * amount); 
+    });
+    showNotification(`Supplied ${partsAdded} parts!`, 'info');
+    updateUI();
+    renderShop();
+}
+
+function paySalary() {
     let totalSalary = 0;
     gameState.employees.forEach(emp => {
         const salary = Math.floor(GAME_CONFIG.baseSalary * (emp.salaryMultiplier || 1) * (1 + emp.speed * 0.1));
@@ -1128,35 +1274,257 @@ function paySalaries() {
     });
     
     if (gameState.money < totalSalary) {
-        const deficit = totalSalary - gameState.money;
         gameState.money = 0;
-        gameState.failedOrderPenalty = (gameState.failedOrderPenalty || 0) + deficit;
-        showNotification(`⚠️ Salary deficit: ${deficit} 💰`, 'error');
-        createParticle('💸', window.innerWidth / 2, window.innerHeight / 2);
+        showNotification('Cannot pay salaries! Game over? 💀', 'error');
     } else {
         gameState.money -= totalSalary;
         gameState.totalSpent += totalSalary;
-        showNotification(`💼 Salaries: -${totalSalary} 💰`, 'info');
+        showNotification(`Paid salaries: 💰 ${totalSalary}`, 'warning');
     }
     
     gameState.lastSalaryTime = Date.now();
     updateUI();
 }
 
-function incrementCombo() {
-    gameState.combo++;
+function autoAssignOrder(orderId) {
+    const order = gameState.orders.find(o => o.id === orderId);
+    if (!order || order.employeeId) return;
     
-    if (gameState.comboTimer) {
-        clearTimeout(gameState.comboTimer);
+    const bestEmployee = getBestEmployeeForOrder(order);
+    
+    if (bestEmployee) {
+        assignEmployeeToOrder(bestEmployee.id, orderId);
+    } else {
+        showNotification('No free employee or missing parts!', 'error');
+    }
+}
+
+function scoreEmployeeForOrder(emp, order) {
+    for (const [part, qty] of Object.entries(order.partsRequired)) {
+        if ((gameState.parts[part] || 0) < qty) return -1; 
     }
     
-    gameState.comboTimer = setTimeout(() => {
-        gameState.combo = 0;
-        updateUI();
-    }, GAME_CONFIG.comboDecayTime);
+    let score = 100 + emp.speed * 20; 
     
-    checkAchievements();
+    const baseTime = order.initialTime;
+    const effectiveSpeed = emp.speed * (1 + (emp.perks.speedBonus || 0)) * (gameState.speedMultiplier || 1);
+    let timeReduction = 0;
+    
+    if (emp.role === 'courier') {
+        timeReduction = baseTime * 0.35; 
+        score += 50; 
+    }
+    const orderRewardRate = order.reward / baseTime;
+    score += effectiveSpeed * orderRewardRate * 5; 
+    
+    if (emp.role === 'warehouse' && (emp.perks.savePartChance || 0) > 0) {
+        const partsCost = calculateBasePartsCost(order.partsRequired);
+        const expectedSaving = partsCost * (emp.perks.savePartChance || 0);
+        score += expectedSaving * 0.5; 
+    }
+    if (emp.role === 'courier' && (emp.perks.bonusReward || 0) > 0) {
+        const bonusValue = order.reward * (emp.perks.bonusReward || 0);
+        score += bonusValue; 
+    }
+    if (emp.role === 'qa') {
+        if (order.rare) score += 60; 
+        if ((emp.perks.breakPartChance || 0) === 0) score += 30; 
+    }
+
+    return score;
+}
+
+function getBestEmployeeForOrder(order) {
+    const availableEmployees = gameState.employees.filter(emp => !emp.isBusy);
+    if (!availableEmployees.length) return null; 
+
+    const scoredEmployees = availableEmployees.map(emp => {
+        const score = scoreEmployeeForOrder(emp, order);
+        return { employee: emp, score };
+    }).filter(s => s.score > 0);
+    
+    if (!scoredEmployees.length) return null;
+
+    scoredEmployees.sort((a, b) => b.score - a.score);
+    
+    return scoredEmployees[0]?.employee || null; 
+}
+
+
+function gameTick(timestamp) {
+    gameState.gameLoopRequestId = requestAnimationFrame(gameTick);
+    
+    if (timestamp - lastTimestamp < ORDER_PROCESSING_INTERVAL) {
+        gameState.orders.forEach(order => {
+            if (order.employeeId && !order.failed) {
+                const card = document.querySelector(`.order-card[data-order-id="${order.id}"]`);
+                if (card) {
+                    const progress = getOrderProgress(order);
+                    const fill = card.querySelector('.progress-fill');
+                    if (fill) fill.style.width = `${progress}%`;
+                }
+            }
+        });
+        return;
+    }
+    
+    lastTimestamp = timestamp;
+
+    if (Date.now() - gameState.lastOrderTime > GAME_CONFIG.orderInterval) {
+        createOrder();
+        gameState.lastOrderTime = Date.now();
+    }
+    
+    gameState.employees.forEach(emp => {
+        if (emp.autoWork && !emp.isBusy) {
+            const availableOrders = gameState.orders.filter(o => !o.employeeId && !o.completed && !o.failed);
+            if (availableOrders.length) {
+                let bestOrder = null;
+                let highestScore = -Infinity;
+                availableOrders.forEach(order => {
+                    const score = scoreEmployeeForOrder(emp, order);
+                    if (score > highestScore) {
+                        highestScore = score;
+                        bestOrder = order;
+                    }
+                });
+                
+                if (bestOrder && highestScore > 0) {
+                    assignEmployeeToOrder(emp.id, bestOrder.id);
+                }
+            }
+        }
+    });
+
+    let ordersChanged = false;
+    gameState.orders.forEach(order => {
+        if (order.employeeId && !order.completed && !order.failed) {
+            const emp = gameState.employees.find(e => e.id === order.employeeId);
+            if (emp) {
+                const speedMultiplier = (gameState.speedMultiplier || 1);
+                const employeeSpeed = emp.speed * (1 + (emp.perks.speedBonus || 0)) * speedMultiplier;
+                const progressIncrease = employeeSpeed * (ORDER_PROCESSING_INTERVAL / 100);
+
+                order.timeRemaining -= progressIncrease;
+                
+                if (order.timeRemaining <= 0) {
+                    ordersChanged = true;
+                    emp.isBusy = false;
+                    emp.ordersCompleted++;
+                    gameState.totalOrdersCompleted++;
+                    
+                    if (order.rare) {
+                        gameState.rareOrdersCompleted++;
+                    }
+                    
+                    let reward = order.reward;
+                    reward = Math.round(reward * (1 + (gameState.combo * 0.05))); 
+
+                    gameState.money += reward;
+                    gameState.totalEarned += reward;
+                    
+                    showNotification(`Completed #${order.id}! +${reward} 💰`, 'success'); 
+                    renderEmployees(); 
+                    incrementCombo();
+                    order.completed = true;
+                    createParticle('💰', 600, 300);
+                    if (order.rare) {
+                        createParticle('⭐', 620, 280);
+                        showNotification(`Rare! +${reward} 💰`, 'success');
+                    }
+                    checkAchievements();
+                }
+            }
+        } else if (!order.employeeId && !order.completed && !order.failed) {
+            order.timeRemaining -= (ORDER_PROCESSING_INTERVAL / 100);
+            
+            if (order.timeRemaining <= 0) {
+                order.failed = true;
+                ordersChanged = true;
+                gameState.totalOrdersFailed++;
+                const penalty = Math.floor(order.reward * GAME_CONFIG.failurePenalty);
+                gameState.money = Math.max(0, gameState.money - penalty);
+                gameState.failedOrderPenalty = (gameState.failedOrderPenalty || 0) + penalty;
+                showNotification(`Failed #${order.id}! -${penalty} 💰`, 'error');
+                createParticle('❌', 600, 300);
+                
+                if (gameState.combo > 0) {
+                    gameState.combo = Math.max(0, gameState.combo - 3);
+                    updateUI();
+                }
+                checkAchievements();
+            }
+        }
+    });
+
+    if (gameState.combo > 0) {
+        if (gameState.comboTimer) clearTimeout(gameState.comboTimer);
+        gameState.comboTimer = setTimeout(() => {
+            if (gameState.combo > 0) {
+                gameState.combo = Math.max(0, gameState.combo - 1);
+                updateUI();
+                if (gameState.combo > 0) {
+                    gameState.comboTimer = setTimeout(decayCombo, GAME_CONFIG.comboDecayTime);
+                } else {
+                    gameState.comboTimer = null;
+                }
+            }
+        }, GAME_CONFIG.comboDecayTime);
+    }
+    
+    gameState.orders = gameState.orders.filter(o => !o.completed);
+    
     updateUI();
+    renderOrders();
+    renderEmployees();
+}
+
+function incrementCombo() {
+    gameState.combo++;
+    updateUI();
+    if (gameState.comboTimer) clearTimeout(gameState.comboTimer);
+    gameState.comboTimer = setTimeout(decayCombo, GAME_CONFIG.comboDecayTime);
+    checkAchievements();
+}
+
+function decayCombo() {
+    if (gameState.combo > 0) {
+        gameState.combo = Math.max(0, gameState.combo - 1);
+        updateUI();
+        if (gameState.combo > 0) {
+            gameState.comboTimer = setTimeout(decayCombo, GAME_CONFIG.comboDecayTime);
+        } else {
+            gameState.comboTimer = null;
+        }
+    }
+}
+
+function showNotification(message, type) {
+    const popup = document.createElement('div');
+    popup.className = `notification ${type}`;
+    popup.textContent = message;
+    
+    const container = document.getElementById('notificationContainer');
+    if (container) container.appendChild(popup);
+    
+    setTimeout(() => {
+        popup.style.opacity = '0';
+        popup.style.transform = 'translateX(400px)';
+        setTimeout(() => popup.remove(), 500);
+    }, 5000);
+}
+
+function createParticle(icon, x, y) {
+    const particle = document.createElement('div');
+    particle.className = 'particle';
+    particle.textContent = icon;
+    particle.style.left = `${x}px`;
+    particle.style.top = `${y}px`;
+    
+    const container = document.getElementById('particleContainer');
+    if (container) container.appendChild(particle);
+    
+    setTimeout(() => particle.remove(), 1500);
 }
 
 function checkAchievements() {
@@ -1169,7 +1537,7 @@ function checkAchievements() {
             createParticle('🏆', window.innerWidth / 2, 100);
         }
     });
-    
+
     if (gameState.currentShopTab === 'achievements') {
         renderShop();
     }
@@ -1185,7 +1553,6 @@ function showAchievementUnlock(ach) {
         <div style="opacity:0.8;">${ach.desc}</div>
         <div style="color:#fbbf24;margin-top:5px;">+${ach.reward} 💰</div>
     `;
-    
     const container = document.getElementById('notificationContainer');
     if (container) container.appendChild(popup);
     
@@ -1197,19 +1564,14 @@ function showAchievementUnlock(ach) {
 }
 
 function triggerRandomEvent() {
-    if (Math.random() < 0.20) { 
+    if (Math.random() < 0.20) {
         const event = RANDOM_EVENTS[Math.floor(Math.random() * RANDOM_EVENTS.length)];
-        
         event.apply();
         showEventBadge(event);
         
         if (event.duration > 0) {
-            const eventData = {
-                name: event.name,
-                endTime: Date.now() + event.duration
-            };
+            const eventData = { name: event.name, endTime: Date.now() + event.duration };
             gameState.activeEvents.push(eventData);
-            
             setTimeout(() => {
                 event.revert();
                 gameState.activeEvents = gameState.activeEvents.filter(e => e.name !== event.name);
@@ -1236,11 +1598,6 @@ function showEventBadge(event) {
             badge.style.opacity = '0';
             setTimeout(() => badge.remove(), 500);
         }, event.duration);
-    } else {
-        setTimeout(() => {
-            badge.style.opacity = '0';
-            setTimeout(() => badge.remove(), 500);
-        }, 3000);
     }
 }
 
@@ -1248,218 +1605,30 @@ function renderEventBadges() {
     const banner = document.getElementById('eventsBanner');
     if (!banner) return;
     
-    gameState.activeEvents.forEach(evt => {
-        const remaining = Math.max(0, Math.ceil((evt.endTime - Date.now()) / 1000));
+    Array.from(banner.children).forEach(child => {
+        if (!gameState.activeEvents.some(e => e.name === child.textContent.substring(child.textContent.indexOf(' ')+1))) {
+            if (!child.dataset.duration) child.remove(); 
+        }
+    });
+
+    gameState.activeEvents.forEach(eventData => {
+        let badge = Array.from(banner.children).find(b => b.textContent.includes(eventData.name));
         
-        let badge = document.querySelector(`.event-badge[data-event-name="${evt.name}"]`);
-        
-        if (remaining > 0) {
-            if (!badge) {
+        if (!badge) {
+            const eventTpl = RANDOM_EVENTS.find(e => e.name === eventData.name);
+            if (eventTpl) {
                 badge = document.createElement('div');
-                badge.className = `event-badge positive`;
-                badge.dataset.eventName = evt.name;
+                badge.className = `event-badge ${eventTpl.type}`;
+                badge.dataset.duration = 'true';
                 banner.appendChild(badge);
             }
-            badge.textContent = `${evt.name} (${remaining}s)`;
-        } else if (badge) {
-            badge.remove();
+        }
+
+        if (badge) {
+            const remaining = Math.max(0, Math.floor((eventData.endTime - Date.now()) / 1000));
+            badge.textContent = `${RANDOM_EVENTS.find(e => e.name === eventData.name).icon} ${eventData.name} (${remaining}s)`;
         }
     });
-
-    Array.from(banner.children).forEach(badge => {
-        if (!gameState.activeEvents.some(e => e.name === badge.dataset.eventName)) {
-            badge.remove();
-        }
-    });
-}
-
-function showNotification(message, type = 'info') {
-    const notification = document.createElement('div');
-    notification.className = `notification ${type}`;
-    notification.textContent = message;
-    
-    const container = document.getElementById('notificationContainer');
-    if (container) container.appendChild(notification);
-    
-    setTimeout(() => {
-        notification.style.opacity = '0';
-        notification.style.transform = 'translateX(400px)';
-        setTimeout(() => notification.remove(), 500);
-    }, 3000);
-}
-
-function createParticle(emoji, x, y) {
-    const particle = document.createElement('div');
-    particle.className = 'particle';
-    particle.textContent = emoji;
-    particle.style.left = x + 'px';
-    particle.style.top = y + 'px';
-    
-    const container = document.getElementById('particleContainer');
-    if (container) container.appendChild(particle);
-    
-    setTimeout(() => particle.remove(), 1500);
-}
-
-let lastTimestamp = 0;
-const ORDER_PROCESSING_INTERVAL = 100;
-
-function findBestEmployeeForOrder(order) {
-    const availableEmployees = gameState.employees.filter(emp => !emp.isBusy);
-    if (!availableEmployees.length) return null;
-    
-    for (const [part, qty] of Object.entries(order.partsRequired)) {
-        if ((gameState.parts[part] || 0) < qty) return null;
-    }
-
-    const scoredEmployees = availableEmployees.map(emp => {
-        let score = 0;
-        
-        if (ROLE_PREFERENCES[emp.role]?.(order)) score += 50;
-        if (emp.role === 'courier' && order.initialTime >= 220) score += 30;
-        if (emp.role === 'qa' && order.rare) score += 40;
-        if (emp.role === 'warehouse' && Object.keys(order.partsRequired).length >= 3) score += 25;
-        
-        score += emp.speed * 10;
-        score += (emp.perks.speedBonus || 0) * 100;
-        score += (emp.perks.savePartChance || 0) * 80;
-        score -= (emp.perks.breakPartChance || 0) * 50;
-        
-        return { employee: emp, score };
-    });
-
-    scoredEmployees.sort((a, b) => b.score - a.score);
-    return scoredEmployees[0]?.employee || null;
-}
-
-function gameTick(timestamp) {
-    gameState.gameLoopRequestId = requestAnimationFrame(gameTick);
-
-    if (timestamp - lastTimestamp < ORDER_PROCESSING_INTERVAL) {
-        gameState.orders.forEach(order => {
-            if (order.employeeId && !order.failed) {
-                const card = document.querySelector(`.order-card[data-order-id="${order.id}"]`);
-                if (card) {
-                    const progress = getOrderProgress(order);
-                    const fill = card.querySelector('.progress-fill');
-                    if (fill) fill.style.width = `${progress}%`;
-                }
-            }
-        });
-        return;
-    }
-    lastTimestamp = timestamp;
-
-    if (Date.now() - gameState.lastOrderTime > GAME_CONFIG.orderInterval) {
-        createOrder();
-        gameState.lastOrderTime = Date.now();
-    }
-    
-    let ordersChanged = false;
-
-    gameState.employees.forEach(emp => {
-        if (emp.autoWork && !emp.isBusy) {
-            const availableOrders = gameState.orders.filter(o => !o.employeeId && !o.failed);
-            const bestOrder = availableOrders.find(order => 
-                ROLE_PREFERENCES[emp.role]?.(order) && 
-                Object.entries(order.partsRequired)
-                    .every(([part, qty]) => (gameState.parts[part] || 0) >= qty)
-            );
-            
-            if (bestOrder) {
-                assignEmployeeToOrder(emp.id, bestOrder.id);
-            }
-        }
-    });
-    
-    gameState.orders.forEach(order => {
-        if (!order.failed) {
-            if (order.employeeId) {
-                const emp = gameState.employees.find(e => e.id === order.employeeId);
-                if (emp) {
-                    const speedWithPerks = emp.speed * (1 + (emp.perks?.speedBonus || 0));
-                    const speedMultiplier = gameState.speedMultiplier || 1;
-                    order.timeRemaining -= speedWithPerks * speedMultiplier * (ORDER_PROCESSING_INTERVAL / 100); 
-                    
-                    if (order.timeRemaining <= 0 && !order.completed) {
-                        let reward = order.reward;
-                        
-                        if (emp.perks?.bonusReward) {
-                            reward = Math.round(reward * (1 + emp.perks.bonusReward));
-                        }
-                        
-                        const comboBonus = 1 + (gameState.combo * 0.05);
-                        reward = Math.round(reward * comboBonus);
-                        
-                        gameState.money += reward;
-                        gameState.totalEarned += reward;
-                        gameState.totalOrdersCompleted++;
-                        ordersChanged = true;
-                        
-                        if (order.rare) {
-                            gameState.rareOrdersCompleted = (gameState.rareOrdersCompleted || 0) + 1;
-                        }
-                        
-                        emp.isBusy = false;
-                        emp.ordersCompleted++;
-                        
-                        if (emp.ordersCompleted % GAME_CONFIG.employeeSpeedIncrementEvery === 0 &&
-                            emp.speed < GAME_CONFIG.employeeMaxSpeed) {
-                            const expBoost = emp.perks?.expBoost || 0;
-                            const speedGain = 0.5 * (1 + expBoost);
-                            emp.speed = Math.min(GAME_CONFIG.employeeMaxSpeed, emp.speed + speedGain);
-                            showNotification(`${emp.name} leveled up! ${emp.speed.toFixed(1)}`, 'success');
-                            renderEmployees(); 
-                        }
-                        
-                        incrementCombo();
-                        order.completed = true;
-                        
-                        createParticle('💰', 600, 300);
-                        if (order.rare) {
-                            createParticle('⭐', 620, 280);
-                            showNotification(`Rare! +${reward} 💰`, 'success');
-                        }
-                        
-                        checkAchievements();
-                    }
-                }
-            } else {
-                order.timeRemaining -= (ORDER_PROCESSING_INTERVAL / 100);
-                
-                if (order.timeRemaining <= 0) {
-                    order.failed = true;
-                    ordersChanged = true;
-                    gameState.totalOrdersFailed++;
-                    
-                    const penalty = Math.floor(order.reward * GAME_CONFIG.failurePenalty);
-                    gameState.money = Math.max(0, gameState.money - penalty);
-                    gameState.failedOrderPenalty = (gameState.failedOrderPenalty || 0) + penalty;
-                    
-                    showNotification(`Failed #${order.id}! -${penalty} 💰`, 'error');
-                    createParticle('❌', 600, 300);
-                    
-                    if (gameState.combo > 0) {
-                        gameState.combo = Math.max(0, gameState.combo - 3);
-                        updateUI();
-                    }
-                    
-                    checkAchievements();
-                }
-            }
-        }
-    });
-    
-    const initialOrderCount = gameState.orders.length;
-    gameState.orders = gameState.orders.filter(o => !o.completed && !o.failed);
-    const finalOrderCount = gameState.orders.length;
-
-    if (ordersChanged || initialOrderCount !== finalOrderCount) {
-        renderOrders();
-        renderEmployees();
-    }
-    
-    updateUI();
 }
 
 function setupShopTabs() {
@@ -1471,34 +1640,6 @@ function setupShopTabs() {
             renderShop();
         });
     });
-}
-
-function initIntervals() {
-    clearAllIntervals();
-
-    gameState.gameLoopRequestId = requestAnimationFrame(gameTick);
-    gameState.saveIntervalId = setInterval(saveGame, 15000);
-    gameState.eventIntervalId = setInterval(triggerRandomEvent, 120000);
-    gameState.eventBadgeIntervalId = setInterval(renderEventBadges, 1000);
-    
-    gameState.salaryIntervalId = setInterval(() => {
-        paySalaries();
-    }, GAME_CONFIG.salaryInterval);
-    
-    gameState.priceUpdateIntervalId = setInterval(() => {
-        updatePartPrices();
-    }, 60000);
-
-    if (gameState.supplyActive) {
-        gameState.supplyIntervalId = setInterval(() => {
-            for (const part in GAME_CONFIG.supplyAmount) {
-                const boost = (gameState.supplyBoost || 0);
-                gameState.parts[part] = (gameState.parts[part] || 0) + GAME_CONFIG.supplyAmount[part] + boost;
-            }
-            showNotification('📦 Supply!', 'success');
-            updateUI();
-        }, GAME_CONFIG.supplyInterval);
-    }
 }
 
 function init() {
@@ -1547,11 +1688,4 @@ function init() {
     }
 }
 
-window.addEventListener('load', init);
-window.addEventListener('beforeunload');
-
-document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') {
-        saveGame();
-    }
-});
+document.addEventListener('DOMContentLoaded', init);
