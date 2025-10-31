@@ -1,7 +1,7 @@
 const CLOUD_SAVE_URL = 'https://api.jsonstorage.net/v1/json/'; 
 
-let CLOUD_SAVE_KEY = '3848d2b1-d502-4b17-ac69-5dfd69292c80';   
-let CLOUD_API_KEY = '2e22a2b3-60d1-4067-93f4-97686c6fde13'; 
+let CLOUD_SAVE_KEY = '3848d2b1-d502-4b17-ac69-5dfd69292c80';   
+let CLOUD_API_KEY = '2e22a2b3-60d1-4067-93f4-97686c6fde13';
 
 const GAME_CONFIG = {
     startMoney: 1500, 
@@ -313,11 +313,40 @@ async function downloadSaveFromCloud() {
 
 function saveGame() {
     try {
-        const saveData = getSaveDataForCloud(); 
-        localStorage.setItem('wsdServiceSave', JSON.stringify(saveData));
-        if (CLOUD_SAVE_KEY && CLOUD_API_KEY) uploadSaveToCloud();
+        localStorage.setItem('repairShopGame', JSON.stringify(gameState));
     } catch (e) {
-        console.error('Save error:', e);
+        console.error('Local Save Failed:', e);
+    }
+    
+    if (CLOUD_SAVE_KEY && CLOUD_API_KEY) {
+        const cloudUrl = `${CLOUD_SAVE_URL}${CLOUD_SAVE_KEY}?apiKey=${CLOUD_API_KEY}`;
+        const savePayload = JSON.stringify(gameState);
+        
+        fetch(cloudUrl, {
+            method: 'PUT', 
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: savePayload
+        })
+        .then(response => {
+            if (response.ok) {
+                showNotification('Cloud Save Successful!', 'success');
+            } else {
+                response.text().then(text => { 
+                    const statusText = response.status === 401 ? 'Unauthorized (Bad API Key)' : 
+                                       response.status === 404 ? 'Not Found (Bad Item ID)' : 
+                                       `Status: ${response.status}`;
+                    throw new Error(`Cloud Save Failed! ${statusText}. Response: ${text.substring(0, 100)}`);
+                });
+            }
+        })
+        .catch(error => {
+            console.error('Cloud Save Error:', error);
+            showNotification('Cloud Save Failed! (Check Keys/API Status)', 'error');
+        });
+    } else {
+        showNotification('Local Save Successful. Cloud Keys Missing!', 'warning');
     }
 }
 
@@ -1358,8 +1387,9 @@ function gameTick(timestamp) {
                     gameState.money += reward;
                     gameState.totalEarned += reward;
                     
-                    showNotification(`Completed #${order.id}! +${reward} 💰`, 'success'); 
-                    renderEmployees(); 
+                    showNotification(`Completed #${order.id}! +${reward} 💰`, 'success');
+                    needsEmployeeRender = true; 
+                    needsOrderRender = true; 
                     incrementCombo();
                     order.completed = true;
                     createParticle('💰', 600, 300);
@@ -1376,6 +1406,7 @@ function gameTick(timestamp) {
             if (order.timeRemaining <= 0) {
                 order.failed = true;
                 ordersChanged = true;
+                needsOrderRender = true;
                 gameState.totalOrdersFailed++;
                 const penalty = Math.floor(order.reward * GAME_CONFIG.failurePenalty);
                 gameState.money = Math.max(0, gameState.money - penalty);
@@ -1407,11 +1438,17 @@ function gameTick(timestamp) {
         }, GAME_CONFIG.comboDecayTime);
     }
     
-    gameState.orders = gameState.orders.filter(o => !o.completed);
+    gameState.orders = gameState.orders.filter(o => !o.completed && !o.failed);
     
     updateUI();
     renderOrders();
-    renderEmployees();
+    if (ordersChanged) { 
+        needsEmployeeRender = true; 
+    }
+
+    if (needsEmployeeRender) { 
+        renderEmployees();
+    }
 }
 
 function incrementCombo() {
@@ -1624,4 +1661,3 @@ function init() {
 }
 
 document.addEventListener('DOMContentLoaded', init);
-
