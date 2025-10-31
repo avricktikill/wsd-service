@@ -1,7 +1,7 @@
 const CLOUD_SAVE_URL = 'https://api.jsonstorage.net/v1/json/'; 
 
-let CLOUD_SAVE_KEY = null;   
-let CLOUD_API_KEY = null;   
+let CLOUD_SAVE_KEY = '3848d2b1-d502-4b17-ac69-5dfd69292c80';   
+let CLOUD_API_KEY = '2e22a2b3-60d1-4067-93f4-97686c6fde13'; 
 
 const GAME_CONFIG = {
     startMoney: 1500, 
@@ -1624,3 +1624,4 @@ function init() {
 }
 
 document.addEventListener('DOMContentLoaded', init);
+
