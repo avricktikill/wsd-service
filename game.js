@@ -1087,20 +1087,16 @@ function doPrestige() {
 }
 
 function resetGame() {
-    if (!confirm('RESET GAME?\n\nAll progress will be lost forever!')) return;
-    
+    if (!confirm('Are you sure you want to fully reset the game? All progress will be lost!')) {
+        return;
+    }
     clearAllIntervals();
     
-    try {
-        sessionStorage.setItem('isResetting', 'true');
-        localStorage.removeItem('wsdServiceSave');
-    } catch (e) {
-        console.error('Clear save error:', e);
-    }
-
-    setTimeout(() => {
-        window.location.reload(true); 
-    }, 50); 
+    sessionStorage.setItem('isResetting', 'true');
+    
+    localStorage.removeItem('wsdServiceSave');
+    
+    window.location.reload(); 
 }
 
 window.addEventListener('beforeunload', () => {
@@ -1525,7 +1521,7 @@ function init() {
         gameState.employees.push({
             id: 'emp-starter',
             avatar,
-            name: 'Trainee',
+            name: 'You',
             role: 'technician',
             roleName: 'Technician',
             speed: 1,
@@ -1552,13 +1548,8 @@ function init() {
 }
 
 window.addEventListener('load', init);
-window.addEventListener('beforeunload', () => {
-    if (sessionStorage.getItem('isResetting') === 'true') {
-        sessionStorage.removeItem('isResetting');
-        return; 
-    }
-    saveGame();
-});
+window.addEventListener('beforeunload');
+
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
         saveGame();
