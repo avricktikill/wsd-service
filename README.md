@@ -9,7 +9,7 @@
 **Idle tech repair simulator with tycoon mechanics.**  
 Manage your workshop, hire staff, complete orders, and grow your digital empire.
 
-[🔗 GitHub](https://github.com/avricktikill/wsd-service) • [💬 Telegram](https://t.me/arhfuo)
+[🔗 GitHub](https://github.com/avricktikill/wsd-service) • [💬 Telegram](https://t.me/arhfuo) • [🎮 Play](https://celestial-forge.com/)
 
 ---
 
