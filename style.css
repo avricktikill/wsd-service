@@ -444,24 +444,25 @@ body {
 }
 
 .shop-item button {
-    padding: 10px 20px;
-    background: linear-gradient(135deg, #667eea, #764ba2);
+    padding: 10px 15px;
     border: none;
-    border-radius: 8px;
+    border-radius: 8px; 
+    background: #10b981; 
     color: white;
     font-weight: bold;
     cursor: pointer;
-    transition: all 0.3s;
+    transition: all 0.2s ease; 
     font-size: 0.9em;
 }
 
 .shop-item button:hover:not(:disabled) {
-    transform: scale(1.1);
-    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+    transform: scale(1.03); 
+    box-shadow: 0 5px 15px rgba(16, 185, 129, 0.4); 
+    background: #059669; 
 }
 
 .shop-item button:active:not(:disabled) {
-    transform: scale(0.95);
+    transform: scale(0.98); 
 }
 
 .shop-item button:disabled {
