@@ -116,7 +116,9 @@ body {
     margin-bottom: 15px;
     border: 2px solid rgba(255,255,255,0.2);
     cursor: grab;
-    transition: all 0.3s;
+    outline: 2px solid transparent; 
+    transition: transform 0.2s ease, box-shadow 0.2s ease, outline 0.2s;
+    will-change: transform, box-shadow;
     position: relative;
     overflow: hidden;
 }
@@ -139,6 +141,9 @@ body {
 .employee-card:hover {
     box-shadow: 0 10px 30px rgba(0,0,0,0.3);
     border-color: rgba(255,255,255,0.4);
+    transform: translateY(-2px) scale(1.01);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.5);
+    outline: 2px solid #a8edea;
 }
 
 .employee-card:active {
@@ -235,12 +240,14 @@ body {
     border-radius: 15px;
     padding: 15px;
     border: 2px solid rgba(255,255,255,0.2);
-    transition: all 0.3s;
+    outline: 2px solid transparent; 
+    transition: transform 0.2s ease, box-shadow 0.2s ease, outline 0.2s;
     position: relative;
+    will-change: transform, box-shadow;
 }
 
 .order-card:hover {
-    box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+    outline: 2px solid #667eea; 
 }
 
 .order-card.rare {
